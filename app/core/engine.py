@@ -9,6 +9,7 @@ from .extractors.base import LabelExtractor
 from .label_text import LabelText
 from .models import ApplicationData, ExtractedLabel, FieldCheck, Status, VerificationResult
 from .preprocess import load_image
+from .quality import assess_quality, too_small_to_read
 from .rules.abv import check_alcohol
 from .rules.net_contents import check_net_contents
 from .rules.text_fields import check_country, match_text_field, resolve_shared_lines
@@ -60,8 +61,10 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
         matches["producer_name_address"].check,
         check_country(application.country_of_origin, application.is_import, label,
                       f.get("country_of_origin"), low_conf, t),
-        check_warning(extracted.warning_text, extracted.warning_heading_bold, extracted.warning_body_bold,
-                      extracted.word_confidences, low_conf, t),
+        cross_check_warning(
+            check_warning(extracted.warning_text, extracted.warning_heading_bold, extracted.warning_body_bold,
+                          extracted.word_confidences, low_conf, t),
+            extracted.cross_check, t),
     ]
 
     if not readable:
@@ -74,35 +77,87 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
     return checks, readable
 
 
+def _step(check: FieldCheck, name: str) -> str | None:
+    return next((s["status"] for s in check.details.get("steps", []) if s["step"] == name), None)
+
+
+def cross_check_warning(primary: FieldCheck, second: ExtractedLabel | None, t: Thresholds = THRESHOLDS) -> FieldCheck:
+    """Compare the warning text from two independent readers.
+
+    A vision model can "correct" an altered warning to the standard wording it knows, or
+    imagine one that is not there. Offline OCR does not do that. If the two disagree about
+    the text, the result is Needs review, never Pass. A bold-type failure is kept as Fail.
+    """
+    if second is None or second.confidence < t.unreadable_below:
+        return primary
+    other = check_warning(second.warning_text, None, None, second.word_confidences,
+                          second.confidence < t.low_confidence_below, t)
+    text_steps = ("present", "heading", "wording")
+    p_ok = all(_step(primary, s) == Status.PASS.value for s in text_steps)
+    o_ok = all(_step(other, s) == Status.PASS.value for s in text_steps)
+    o_fail = any(_step(other, s) == Status.FAIL.value for s in text_steps)
+    p_fail = any(_step(primary, s) == Status.FAIL.value for s in text_steps)
+    bold_fail = _step(primary, "bold") == Status.FAIL.value
+
+    summary = {"status": other.status.value, "reason": other.reason, "found": other.found,
+               "diff": other.details.get("diff", [])}
+    primary.details["cross_check"] = summary
+    if p_ok and o_fail:
+        primary.status = Status.FAIL if bold_fail else Status.NEEDS_REVIEW
+        primary.reason = ("The cloud reader saw the required wording, but the offline reader saw differences: "
+                          f"{other.reason} Compare the warning by eye.")
+        if bold_fail:
+            primary.reason = f"{primary.reason} Also: {next(s['reason'] for s in primary.details['steps'] if s['step'] == 'bold')}"
+        primary.details["readers_disagree"] = True
+    elif p_fail and o_ok and not bold_fail:
+        primary.status = Status.NEEDS_REVIEW
+        primary.reason = (f"The cloud reader reported: {primary.reason} The offline reader saw the required wording "
+                          "exactly. Compare the warning by eye.")
+        primary.details["readers_disagree"] = True
+    return primary
+
+
 def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExtractor,
            t: Thresholds = THRESHOLDS) -> VerificationResult:
     t0 = time.perf_counter()
     image = load_image(image_bytes)
+    quality = assess_quality(image)
     t1 = time.perf_counter()
     extracted = extractor.extract(image)
     t2 = time.perf_counter()
     checks, readable = evaluate(application, extracted, t)
+    if readable and too_small_to_read(quality):
+        checks, readable = evaluate(application, extracted.model_copy(update={"confidence": 0.0}), t)
     t3 = time.perf_counter()
 
     overall = _overall(checks)
-    message = None
+    notes = []
+    if extracted.fallback_reason:
+        notes.append(extracted.fallback_reason)
     if not readable:
-        overall, message = Status.NEEDS_REVIEW, UNREADABLE_MESSAGE
-    elif extracted.notes:
-        message = "Image adjusted before reading: " + "; ".join(extracted.notes) + "."
+        overall = Status.NEEDS_REVIEW
+        notes.insert(0, UNREADABLE_MESSAGE)
+    if extracted.notes:
+        notes.append("Reader notes: " + "; ".join(extracted.notes) + ".")
+    if quality.issues:
+        notes.append(" ".join(quality.issues))
 
+    timings = {
+        "decode": int((t1 - t0) * 1000),
+        "preprocess": extracted.preprocess_ms,
+        "extract": extracted.extraction_ms,
+        "rules": int((t3 - t2) * 1000),
+        "total": int((t3 - t0) * 1000),
+    }
+    if extracted.cross_check:
+        timings["cross_check"] = extracted.cross_check.extraction_ms + extracted.cross_check.preprocess_ms
     return VerificationResult(
         overall=overall,
         checks=checks,
         not_checked=NOT_CHECKED,
         image_readable=readable,
         provider=extracted.provider,
-        message=message,
-        timings_ms={
-            "decode": int((t1 - t0) * 1000),
-            "preprocess": extracted.preprocess_ms,
-            "extract": extracted.extraction_ms,
-            "rules": int((t3 - t2) * 1000),
-            "total": int((t3 - t0) * 1000),
-        },
+        message=" ".join(notes) or None,
+        image_quality=quality,
+        timings_ms=timings,
     )

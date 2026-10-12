@@ -45,6 +45,18 @@ class TextMatch:
     coverage: float
 
 
+@dataclass
+class Score:
+    score: float  # 0..100 fuzzy similarity, used only to choose Needs review vs Fail
+    coverage: float  # share of the label line taken up by the match, 0..1
+    exact: bool  # every expected word present exactly (after case/punctuation normalization)
+
+
+def _contains_run(needle: list[str], hay: list[str]) -> bool:
+    n = len(needle)
+    return any(hay[i:i + n] == needle for i in range(len(hay) - n + 1))
+
+
 def _token_recall(expected: str, span: str) -> float:
     """Share of the expected words (by length) present in the span, allowing small misreads."""
     exp_tokens = expected.split()
@@ -60,23 +72,59 @@ def _token_recall(expected: str, span: str) -> float:
     return hit / total
 
 
-def _score(kind: str, expected: str, span_norm: str) -> tuple[float, float]:
-    """Return (score 0..100, coverage of the span by the match 0..1)."""
+def _score(kind: str, expected: str, span_norm: str) -> Score:
+    """Compare normalized expected text with a normalized label span.
+
+    Only an exact word match (ignoring case, punctuation and spacing) can lead to Pass.
+    The fuzzy score decides between Needs review (a near miss, e.g. one letter off,
+    which may be an OCR misread or a real spelling difference) and Fail.
+    """
     if not span_norm:
-        return 0.0, 0.0
+        return Score(0.0, 0.0, False)
     if expected == span_norm:
-        return 100.0, 1.0
+        return Score(100.0, 1.0, True)
+    exp_tokens = expected.split()
     if kind == "partial":
+        span_tokens = span_norm.split()
+        if _contains_run(exp_tokens, span_tokens):
+            return Score(100.0, len(expected) / len(span_norm), True)
+        # Same words with the spaces in different places, e.g. "STONESTHROW".
+        if expected.replace(" ", "") == span_norm.replace(" ", ""):
+            return Score(100.0, 1.0, True)
         if len(span_norm) <= len(expected):
             # A short span must not "fully match" just by being a piece of the expected value.
-            return fuzz.ratio(expected, span_norm), 1.0
+            return Score(fuzz.ratio(expected, span_norm), 1.0, False)
         al = fuzz.partial_ratio_alignment(expected, span_norm)
-        return al.score, (al.dest_end - al.dest_start) / len(span_norm)
+        return Score(al.score, (al.dest_end - al.dest_start) / len(span_norm), False)
     # token: every expected word must be present; extra label words lower coverage only.
     stripped = _PRODUCER_PREFIX.sub("", span_norm) or span_norm
-    score = min(fuzz.token_set_ratio(expected, stripped), 100 * _token_recall(expected, stripped))
-    coverage = min(1.0, len(expected) / len(stripped))
-    return score, coverage
+    exact = set(exp_tokens) <= set(stripped.split())
+    score = 100.0 if exact else min(fuzz.token_set_ratio(expected, stripped), 100 * _token_recall(expected, stripped))
+    return Score(score, min(1.0, len(expected) / len(stripped)), exact)
+
+
+def spelling_differences(expected_raw: str, found_raw: str) -> list[dict]:
+    """Expected words that are not on the label exactly, with the closest label word."""
+    found_words = [(w, normalize(w)) for w in clean(found_raw).split()]
+    found_words = [(w, n) for w, n in found_words if n]
+    found_norm = {n for _, n in found_words}
+    diffs = []
+    for word in clean(expected_raw).split():
+        n = normalize(word)
+        if not n or n in found_norm:
+            continue
+        closest = max(found_words, key=lambda fw: fuzz.ratio(n, fw[1]), default=None)
+        if closest and fuzz.ratio(n, closest[1]) >= 60:
+            diffs.append({"expected": word, "found": closest[0]})
+        else:
+            diffs.append({"expected": word, "found": None})
+    return diffs
+
+
+def _describe(diffs: list[dict]) -> str:
+    parts = [f"\"{d['found']}\" instead of \"{d['expected']}\"" if d["found"] else f"\"{d['expected']}\" missing"
+             for d in diffs[:3]]
+    return "; ".join(parts) + ("; ..." if len(diffs) > 3 else "")
 
 
 def match_text_field(
@@ -92,28 +140,41 @@ def match_text_field(
 ) -> TextMatch:
     name = FIELD_LABELS[field]
     expected = normalize(expected_raw)
-    rule = ("case/punctuation-insensitive match, fuzzy search" if kind == "partial"
-            else "word-set match, all expected words required")
+    rule = ("exact match ignoring capitalization and punctuation" if kind == "partial"
+            else "all expected words present, ignoring capitalization and punctuation")
 
-    def rank(c: tuple[float, float, Span]) -> tuple:
-        score, coverage, span = c
-        return (score >= pass_at and coverage >= t.line_coverage_min, score, coverage, -len(span.lines))
+    def rank(c: tuple[Score, Span]) -> tuple:
+        sc, span = c
+        return (sc.exact and sc.coverage >= t.line_coverage_min, sc.exact, sc.score, sc.coverage, -len(span.lines))
 
-    candidates = [(*_score(kind, expected, span.norm), span) for span in label.spans]
+    candidates = [(_score(kind, expected, span.norm), span) for span in label.spans]
     best = max(candidates, key=rank) if candidates else None
 
-    details: dict = {"pass_at": pass_at, "review_at": review_at}
+    details: dict = {"review_at": review_at}
+
+    def near_miss(found: str, sc: Score) -> tuple[Status, str]:
+        diffs = spelling_differences(expected_raw, found)
+        details["spelling_differences"] = diffs
+        what = _describe(diffs) if diffs else "the wording differs"
+        lead = "Nearly matches" if sc.score >= pass_at else "Similar to the application"
+        return Status.NEEDS_REVIEW, (f"{lead}, but the spelling is not the same ({what}). "
+                                     "This may be a reading error or a real difference. Compare by eye.")
 
     # Vision provider: compare against the field it read; a disagreeing full-text hit is never a Pass.
     if extracted_value is not None:
-        ext_score, _ = _score(kind, expected, normalize(extracted_value))
-        details["score"] = round(ext_score, 1)
         found = clean(extracted_value)
-        if ext_score >= pass_at:
+        sc = _score(kind, expected, normalize(extracted_value))
+        details["score"] = round(sc.score, 1)
+        if sc.exact and sc.coverage >= t.line_coverage_min:
             status, reason = Status.PASS, _pass_reason(expected_raw, found, name)
-        elif ext_score >= review_at or low_confidence:
-            status, reason = Status.NEEDS_REVIEW, f"The {name} on the label is close to, but not the same as, the application. Compare by eye."
-        elif best and best[0] >= pass_at:
+        elif sc.exact:
+            status = Status.NEEDS_REVIEW
+            reason = f"The label's {name} reads \"{found}\", which contains the application value plus other words. Compare by eye."
+        elif sc.score >= review_at:
+            status, reason = near_miss(found, sc)
+        elif low_confidence:
+            status, reason = Status.NEEDS_REVIEW, f"The {name} could not be confirmed; the image is hard to read."
+        elif best and best[0].exact:
             status, reason = Status.NEEDS_REVIEW, f"The label's {name} reads \"{found}\", but the application value also appears elsewhere on the label. Compare by eye."
         else:
             status, reason = Status.FAIL, f"The label's {name} reads \"{found}\", which does not match the application."
@@ -127,31 +188,30 @@ def match_text_field(
         return TextMatch(FieldCheck(field=field, status=status, expected=expected_raw, found=None,
                                     rule=rule, reason=reason, details=details), None, 0.0)
 
-    score, coverage, span = best
-    details.update(score=round(score, 1), line_coverage=round(coverage, 2))
-    if score >= pass_at and coverage >= t.line_coverage_min:
+    sc, span = best
+    details.update(score=round(sc.score, 1), line_coverage=round(sc.coverage, 2))
+    if sc.exact and sc.coverage >= t.line_coverage_min:
         status, reason = Status.PASS, _pass_reason(expected_raw, span.text, name)
-    elif score >= pass_at:
+    elif sc.exact:
         status = Status.NEEDS_REVIEW
         reason = f"Found on the label but not confirmed as the {name} (it appears inside other text: \"{span.text}\")."
-    elif score >= review_at:
-        status = Status.NEEDS_REVIEW
-        reason = f"Close but not an exact match to the application ({score:.0f}% similar). Compare by eye."
+    elif sc.score >= review_at:
+        status, reason = near_miss(span.text, sc)
     elif low_confidence:
         status = Status.NEEDS_REVIEW
         reason = f"The {name} could not be confirmed; the image is hard to read. Request a better image."
     else:
         status = Status.FAIL
         reason = f"The application's {name} was not found on the label (closest text: \"{span.text}\")."
-    found = span.text if score >= review_at else (span.text if status == Status.FAIL else None)
+    found = span.text if (sc.score >= review_at or status == Status.FAIL) else None
     return TextMatch(FieldCheck(field=field, status=status, expected=expected_raw, found=found,
-                                rule=rule, reason=reason, details=details), span, coverage)
+                                rule=rule, reason=reason, details=details), span, sc.coverage)
 
 
 def _pass_reason(expected: str, found: str, name: str) -> str:
     if clean(expected) == found:
         return f"The {name} matches the application."
-    return f"The {name} matches the application, ignoring capitalization and punctuation."
+    return f"The {name} matches the application (differences in capitalization or punctuation only)."
 
 
 def resolve_shared_lines(matches: dict[str, TextMatch]) -> None:
@@ -196,8 +256,12 @@ def check_country(
                           rule=rule, reason=reason)
 
     if extracted_value is not None:
-        if fuzz.ratio(expected, _canon_country(extracted_value)) >= t.country_pass:
+        named = _canon_country(_COUNTRY_PREFIX.sub(r"\1", normalize(extracted_value)))
+        if named == expected:
             return fc(Status.PASS, clean(extracted_value), "Country of origin matches the application.")
+        if fuzz.ratio(expected, named) >= t.country_review:
+            return fc(Status.NEEDS_REVIEW, clean(extracted_value),
+                      "Country of origin is spelled differently from the application. Compare by eye.")
         return fc(Status.FAIL, clean(extracted_value),
                   f"The label gives the country of origin as \"{clean(extracted_value)}\", not \"{expected_raw}\".")
 
@@ -209,11 +273,15 @@ def check_country(
         if m:
             statements.append((span.text, m.group(1)))
     for text, country in statements:
-        if fuzz.ratio(expected, _canon_country(country)) >= t.country_pass:
+        if _canon_country(country) == expected:
             return fc(Status.PASS, text, "Country of origin statement matches the application.")
     for span in label.spans:
-        if len(span.lines) == 1 and fuzz.ratio(expected, _canon_country(span.norm)) >= t.country_pass:
+        if len(span.lines) == 1 and _canon_country(span.norm) == expected:
             return fc(Status.PASS, span.text, "Country of origin appears on its own line and matches the application.")
+    for text, country in statements:
+        if fuzz.ratio(expected, _canon_country(country)) >= t.country_review:
+            return fc(Status.NEEDS_REVIEW, text,
+                      "Country of origin is spelled differently from the application. Compare by eye.")
     if statements:
         text, _ = statements[0]
         return fc(Status.FAIL, text, f"The label's country of origin (\"{text}\") does not match \"{expected_raw}\".")

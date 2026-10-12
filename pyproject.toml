@@ -13,6 +13,8 @@ dependencies = [
     "pillow>=10.3",
     "rapidfuzz>=3.9",
     "numpy>=1.26",
+    "openai>=1.55",
+    "azure-identity>=1.17",
 ]
 
 [project.optional-dependencies]
@@ -28,3 +30,6 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["ocr: runs real Tesseract on rendered fixtures (slower)"]
+
+[tool.setuptools.package-data]
+app = ["web/*", "web/examples/*"]

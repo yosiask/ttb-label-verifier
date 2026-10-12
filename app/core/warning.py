@@ -26,6 +26,7 @@ CANONICAL_WARNING = (
 )
 CANONICAL_WORDS = CANONICAL_WARNING.split()
 
+_ALNUM = re.compile(r"[^A-Za-z0-9]")
 _HEADING_LOOSE = re.compile(r"^\s*government\s+warning\s*([:;.,]?)", re.IGNORECASE)
 
 
@@ -113,8 +114,10 @@ def check_warning(
     found_text = " ".join(found_words)
     statuses: list[Status] = []
 
-    def low_conf(idx: list[int]) -> bool:
+    def low_conf(idx: list[int], unknown_is_unsure: bool = False) -> bool:
         confs = [tokens[i][1] for i in idx if i < len(tokens)]
+        if unknown_is_unsure and confs and all(c is None for c in confs):
+            return True  # provider gives no per-word confidence (vision): a few letters may be misread
         return bool(confs) and all(c is not None and c < t.warning_noise_word_conf for c in confs)
 
     # 2. Heading: exactly "GOVERNMENT WARNING:" in capitals with a colon.
@@ -154,16 +157,24 @@ def check_warning(
                                 for tag, i1, i2, j1, j2 in opcodes_body)
         edits = 0
         affected: list[int] = []
+        punctuation_only = True
         for tag, i1, i2, j1, j2 in opcodes_body:
             if tag == "replace" and (i2 - i1) == (j2 - j1):
                 for a, b in zip(range(i1, i2), range(j1, j2)):
                     edits += Levenshtein.distance(CANONICAL_WORDS[a], found_words[b])
                     affected.append(b)
+                    if _ALNUM.sub("", CANONICAL_WORDS[a]) != _ALNUM.sub("", found_words[b]):
+                        punctuation_only = False
         if not opcodes_body:
             wording_status, wording_reason = Status.PASS, "Body wording matches the required text word for word."
-        elif not whole_word_change and edits <= t.warning_noise_max_edits and low_conf(affected):
+        elif not whole_word_change and punctuation_only and edits <= t.warning_noise_max_edits:
+            # Readers often confuse "," and "." on small or blurred print, even when confident.
             wording_status = Status.NEEDS_REVIEW
-            wording_reason = ("Possible reading error: a few letters differ in words the OCR was unsure of. "
+            wording_reason = (f"Only punctuation differs ({_describe_diff(diff).split(': ', 1)[1].rstrip('.')}). "
+                              "This is often a reading error on small print. Compare the warning by eye.")
+        elif not whole_word_change and edits <= t.warning_noise_max_edits and low_conf(affected, unknown_is_unsure=True):
+            wording_status = Status.NEEDS_REVIEW
+            wording_reason = ("Possible reading error: a few letters differ in words the reader was unsure of. "
                               "Compare the warning by eye.")
         else:
             wording_status = Status.FAIL

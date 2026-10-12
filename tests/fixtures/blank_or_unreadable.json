@@ -36,6 +36,7 @@
       "fields": {}
     }
   },
+  "image": "blank_or_unreadable.png",
   "degradation": [
     "blank"
   ]

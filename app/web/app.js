@@ -103,17 +103,24 @@ async function loadConfig() {
   try {
     const cfg = await fetch("api/config").then((r) => r.json());
     maxUploadMb = cfg.max_upload_mb || 10;
-    const options = [["local", "Offline OCR (works without internet)", cfg.providers.local]];
-    options.unshift(["azure", "Cloud AI (checks bold type)", cfg.providers.azure]);
+    const cloud = cfg.providers.azure && cfg.cloud_available_today;
+    const options = [
+      ["auto", "Cloud AI (checks bold type; uses offline OCR if the cloud is unavailable)", cloud],
+      ["local", "Offline OCR (works without internet)", cfg.providers.local],
+    ];
     for (const [value, label, enabled] of options) {
-      const opt = el("option", { value }, enabled ? label : `${label} – not available`);
+      const opt = el("option", { value }, enabled ? label : `${label} \u2013 not available`);
       if (!enabled) opt.disabled = true;
       select.append(opt);
     }
-    select.value = cfg.providers.azure ? "azure" : "local";
-    $("provider-note").textContent = cfg.providers.azure
-      ? ""
-      : "Offline OCR cannot see bold type, so a label that passes everything else shows “Needs review” for the warning.";
+    select.value = cloud ? "auto" : "local";
+    const note = () => {
+      $("provider-note").textContent = select.value === "local"
+        ? "Offline OCR cannot see bold type, so a label that passes everything else shows \u201cNeeds review\u201d for the warning."
+        : "The label image is sent to the cloud AI service to be read. It is not stored by this app.";
+    };
+    select.addEventListener("change", note);
+    note();
   } catch {
     select.append(el("option", { value: "local" }, "Offline OCR"));
   }
@@ -198,11 +205,23 @@ function renderResult(r, roundTripSeconds) {
         steps.append(el("li", {}, `${(STATUS[st.status] || {}).word || st.status} – ${st.step}: ${st.reason}`));
       }
       det.append(steps);
+      const legend = "Struck-through text is required but missing; underlined text is on the label but not in the required wording.";
       if (c.details.diff && c.details.diff.length) {
-        det.append(el("p", { class: "diff-legend" }, "Struck-through text is required but missing; underlined text is on the label but not in the required wording."));
+        det.append(el("p", { class: "diff-legend" }, legend));
         det.append(renderDiff(c.details.diff));
       }
+      const xc = c.details.cross_check;
+      if (c.details.readers_disagree && xc) {
+        det.append(el("p", { class: "diff-legend" }, `The offline reader saw: ${xc.reason}`));
+        if (xc.diff && xc.diff.length) det.append(renderDiff(xc.diff));
+      }
       why.append(det);
+    }
+    const sd = c.details && c.details.spelling_differences;
+    if (sd && sd.length) {
+      const box = el("div", { class: "diff-text" });
+      for (const d of sd) box.append(el("del", { title: "Application" }, d.expected), " \u2192 ", d.found ? el("ins", { title: "Label" }, d.found) : "(not on label)", el("br"));
+      why.append(box);
     }
     tbody.append(el("tr", {},
       el("td", {}, pill(c.status)),

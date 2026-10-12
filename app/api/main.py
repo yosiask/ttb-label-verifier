@@ -12,7 +12,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import errors
-from .routes import router
+from .protection import BodySizeLimit
+from .routes import max_upload_bytes, router
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 
@@ -29,5 +30,8 @@ async def security_headers(request, call_next):
     response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
     return response
 
+
+# Whole-request cap: the image limit plus 1 MB for the form fields and multipart overhead.
+app.add_middleware(BodySizeLimit, max_bytes_fn=lambda: max_upload_bytes() + 1024 * 1024)
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

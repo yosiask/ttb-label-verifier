@@ -40,5 +40,6 @@
       }
     }
   },
+  "image": "warning_missing.png",
   "degradation": null
 }

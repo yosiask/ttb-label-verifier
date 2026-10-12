@@ -56,6 +56,19 @@ class ExtractedLabel(BaseModel):
     extraction_ms: int
     preprocess_ms: int = 0
     notes: list[str] = []  # provider remarks shown to the reviewer (e.g. "deskewed 4.5 degrees")
+    # A second, independent reading (offline OCR alongside cloud vision). Used only to catch
+    # disagreements, e.g. a vision model "correcting" an altered warning to the standard text.
+    cross_check: ExtractedLabel | None = None
+    fallback_reason: str | None = None  # set when this reading replaced a provider that failed
+
+
+class ImageQuality(BaseModel):
+    width: int
+    height: int
+    sharpness: float  # Laplacian variance / gray variance at a standard size; low = blurry
+    brightness: float  # mean gray level 0..255
+    contrast: float  # gray-level standard deviation
+    issues: list[str] = []  # plain-English problems, e.g. "The photo is blurry."
 
 
 class FieldCheck(BaseModel):
@@ -75,4 +88,5 @@ class VerificationResult(BaseModel):
     image_readable: bool
     provider: str
     message: str | None = None  # banner-level explanation, e.g. "request a better image"
+    image_quality: ImageQuality | None = None
     timings_ms: dict[str, int]

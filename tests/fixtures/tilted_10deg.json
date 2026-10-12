@@ -37,6 +37,7 @@
       "fields": {}
     }
   },
+  "image": "tilted_10deg.png",
   "degradation": [
     "tilt",
     10

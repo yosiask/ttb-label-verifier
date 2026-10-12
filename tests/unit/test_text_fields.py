@@ -93,3 +93,63 @@ def test_country_rules():
     assert country("Scotland", "GLEN X\n750 mL").status == Status.FAIL
     assert country("Scotland", "GLEN X\n750 mL", low=True).status == Status.NEEDS_REVIEW
     assert country("France", "Imported by X Co., Paris, France").status == Status.NEEDS_REVIEW
+
+
+# --- Cosmetic differences pass; spelling differences never pass automatically ---
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("label_brand", [
+    "STONE'S THROW", "Stone’s Throw", "stone's throw", "STONES THROW", "Stone's-Throw", "STONE'S  THROW.",
+    "STONESTHROW",
+])
+def test_cosmetic_variants_pass(label_brand):
+    assert brand("Stone's Throw", f"{label_brand}\n750 mL").status == Status.PASS
+
+
+@pytest.mark.parametrize("label_brand", [
+    "OLD TOM DISTILERY",      # one letter missing (similarity 97)
+    "OLD TOM DISTILLERIE",    # one letter changed
+    "OLD TOMS DISTILLERY",    # one letter added
+    "OLD TOM DISTILLING",
+])
+def test_one_letter_or_near_miss_is_review_not_pass(label_brand):
+    c = brand("OLD TOM DISTILLERY", f"{label_brand}\n750 mL")
+    assert c.status == Status.NEEDS_REVIEW
+    assert "spelling" in c.reason
+    assert c.details["spelling_differences"]
+
+
+def test_spelling_difference_named_for_reviewer():
+    c = brand("OLD TOM DISTILLERY", "OLD TOM DISTILERY\n750 mL")
+    assert c.details["spelling_differences"] == [{"expected": "DISTILLERY", "found": "DISTILERY"}]
+    assert '"DISTILERY" instead of "DISTILLERY"' in c.reason
+
+
+def test_short_brand_one_letter_off_is_review():
+    assert brand("ABSOLUT", "ABSOLUTE\n750 mL").status == Status.NEEDS_REVIEW
+
+
+def test_brand_with_extra_words_on_its_line():
+    # Exact words, but they cover too little of the line to confirm the field.
+    assert brand("OLD TOM", "OLD TOM KENTUCKY STRAIGHT BOURBON WHISKEY").status == Status.NEEDS_REVIEW
+
+
+def test_class_type_spelling_variant_is_review():
+    assert klass("Blended Scotch Whisky", "GLEN X\nBlended Scotch Whiskey").status == Status.NEEDS_REVIEW
+
+
+def test_producer_misspelling_is_review():
+    c = match_text_field("producer_name_address", "Old Tom Distillery, Bardstown, Kentucky",
+                         LabelText.from_full_text("OLD TOM\nDistilled by Old Tom Distilery, Bardstown, Kentucky"),
+                         None, False, T.producer_pass, T.producer_review, "token").check
+    assert c.status == Status.NEEDS_REVIEW
+
+
+def test_vision_field_one_letter_off_is_review():
+    assert brand("OLD TOM DISTILLERY", "x", extracted="OLD TOM DISTILERY").status == Status.NEEDS_REVIEW
+
+
+def test_country_misspelling_is_review():
+    assert country("Scotland", "GLEN X\nProduct of Scotlnd").status == Status.NEEDS_REVIEW

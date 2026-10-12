@@ -142,6 +142,10 @@ def low_res(img: Image.Image) -> Image.Image:
     return img.resize((img.width * 45 // 100, img.height * 45 // 100), Image.BILINEAR)
 
 
+def blur(img: Image.Image, radius: float) -> Image.Image:
+    return img.filter(ImageFilter.GaussianBlur(radius))
+
+
 def blank(_: Image.Image) -> Image.Image:
     rng = np.random.default_rng(7)
     a = np.full((H, W, 3), 128, np.float32) + rng.normal(0, 40, (H, W, 3))
@@ -233,9 +237,26 @@ CASES = [
          local=exp(["fail", "needs_review"]), vision=exp(["fail", "needs_review"])),
     case("blank_or_unreadable", "No readable label: noise only.", post=("blank",),
          local=exp("needs_review"), vision=exp("needs_review")),
+    case("brand_one_letter_off", "Label says MAPLE CREAK, application says MAPLE CREEK: a spelling difference "
+         "that must not pass automatically.",
+         label={"brand": "MAPLE CREAK", "producer": "Distilled and Bottled by Harbor Spirits Co., Louisville, Kentucky"},
+         app={"brand_name": "MAPLE CREEK", "producer_name_address": "Harbor Spirits Co., Louisville, Kentucky"},
+         local=exp("needs_review", {"brand_name": "needs_review"}),
+         vision=exp("needs_review", {"brand_name": "needs_review"}), example=True),
+    case("blurry", "Compliant label, out of focus.", post=("blur", 2.2),
+         local=exp("needs_review"), vision=exp(["pass", "needs_review"])),
+    case("exif_rotated", "Compliant label saved sideways as a phone JPEG with an EXIF rotation tag.",
+         post=("exif",), local=exp("needs_review", {**ALL_PASS, **BOLD_REVIEW}), vision=exp("pass", ALL_PASS)),
 ]
 
-POST = {"tilt": tilt, "dim": dim, "glare": glare, "low_res": low_res, "blank": blank}
+POST = {"tilt": tilt, "dim": dim, "glare": glare, "low_res": low_res, "blank": blank, "blur": blur}
+
+
+def save_exif_rotated(img: Image.Image, path: Path) -> None:
+    """Store the pixels rotated 90 degrees with EXIF Orientation=6, as many phones do."""
+    exif = Image.Exif()
+    exif[0x0112] = 6  # display needs a 90 degree clockwise turn
+    img.rotate(90, expand=True).save(path, "JPEG", quality=92, exif=exif)
 
 
 def main() -> None:
@@ -243,11 +264,17 @@ def main() -> None:
     EXAMPLES.mkdir(parents=True, exist_ok=True)
     for c in CASES:
         img = render(c["label"])
-        if c["post"]:
-            fn, *args = c["post"]
-            img = POST[fn](img, *args)
-        img.save(OUT / f"{c['case']}.png", optimize=True)
+        image_name = f"{c['case']}.png"
+        if c["post"] and c["post"][0] == "exif":
+            image_name = f"{c['case']}.jpg"
+            save_exif_rotated(img, OUT / image_name)
+        else:
+            if c["post"]:
+                fn, *args = c["post"]
+                img = POST[fn](img, *args)
+            img.save(OUT / image_name, optimize=True)
         meta = {k: v for k, v in c.items() if k not in ("post", "example")}
+        meta["image"] = image_name
         meta["degradation"] = list(c["post"]) if c["post"] else None
         (OUT / f"{c['case']}.json").write_text(json.dumps(meta, indent=2) + "\n")
         if c["example"]:

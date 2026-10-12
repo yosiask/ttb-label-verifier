@@ -11,8 +11,8 @@ log = logging.getLogger("ttb")
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, error_code: str, message: str):
-        self.status, self.error_code, self.message = status, error_code, message
+    def __init__(self, status: int, error_code: str, message: str, headers: dict[str, str] | None = None):
+        self.status, self.error_code, self.message, self.headers = status, error_code, message, headers
 
 
 def _body(code: str, message: str) -> dict:
@@ -22,7 +22,7 @@ def _body(code: str, message: str) -> dict:
 def install(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def api_error(_: Request, e: ApiError):
-        return JSONResponse(_body(e.error_code, e.message), status_code=e.status)
+        return JSONResponse(_body(e.error_code, e.message), status_code=e.status, headers=e.headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, e: RequestValidationError):

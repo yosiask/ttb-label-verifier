@@ -37,6 +37,7 @@
       "fields": {}
     }
   },
+  "image": "low_res.png",
   "degradation": [
     "low_res"
   ]

@@ -12,7 +12,7 @@ from tests.conftest import LABEL_TEXT, FakeExtractor, make_label
 
 def png() -> bytes:
     buf = io.BytesIO()
-    Image.new("RGB", (40, 40), "white").save(buf, "PNG")
+    Image.new("RGB", (800, 600), "white").save(buf, "PNG")
     return buf.getvalue()
 
 

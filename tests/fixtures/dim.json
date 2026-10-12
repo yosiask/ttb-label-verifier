@@ -37,6 +37,7 @@
       "fields": {}
     }
   },
+  "image": "dim.png",
   "degradation": [
     "dim"
   ]

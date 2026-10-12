@@ -100,3 +100,19 @@ def test_missing_warning():
 def test_heading_absent_body_present_fails():
     c = check(CANONICAL_WARNING.replace("GOVERNMENT WARNING: ", ""), heading_bold=None, body_bold=None)
     assert c.status == Status.FAIL
+
+
+def test_confident_punctuation_misread_is_review_not_fail():
+    text = CANONICAL_WARNING.replace("General,", "General.").replace("machinery,", "machinery.")
+    c = check(text)  # high OCR confidence on every word
+    assert c.status == Status.NEEDS_REVIEW
+    assert "punctuation" in c.reason.lower() and '"General." instead of "General,"' in c.reason
+
+
+def test_punctuation_rule_does_not_hide_word_changes():
+    text = CANONICAL_WARNING.replace("General,", "General.").replace("cause health", "cause serious health")
+    assert check(text).status == Status.FAIL
+
+
+def test_case_change_is_not_punctuation():
+    assert check(CANONICAL_WARNING.replace("Consumption", "consumption")).status == Status.FAIL

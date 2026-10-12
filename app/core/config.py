@@ -10,7 +10,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Thresholds:
-    # Text fields: (pass at or above, needs review at or above, otherwise fail)
+    # Text fields. Pass needs every expected word on the label exactly (ignoring case,
+    # punctuation and spacing); fuzzy similarity never passes on its own. Similarity at or
+    # above *_review is Needs review (near miss, shown with the differing words); below it
+    # is Fail on a readable label. *_pass only changes the wording ("Nearly matches").
     brand_pass: float = 95
     brand_review: float = 85
     class_type_pass: float = 92

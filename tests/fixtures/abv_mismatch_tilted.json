@@ -38,6 +38,7 @@
       "fields": {}
     }
   },
+  "image": "abv_mismatch_tilted.png",
   "degradation": [
     "tilt",
     -6
