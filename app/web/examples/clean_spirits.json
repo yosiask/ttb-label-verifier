@@ -1,0 +1,13 @@
+{
+  "description": "Compliant bourbon label (the brief's OLD TOM DISTILLERY example).",
+  "application": {
+    "brand_name": "OLD TOM DISTILLERY",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol_content": "45% Alc./Vol. (90 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Old Tom Distillery, Bardstown, Kentucky",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  }
+}

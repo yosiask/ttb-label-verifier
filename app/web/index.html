@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alcohol Label Verifier</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>Alcohol Label Verifier</h1>
+    <p class="tagline">Upload a label image, enter what the application says, and get a field-by-field check.</p>
+  </header>
+
+  <main>
+    <section class="panel" aria-labelledby="single-heading">
+      <h2 id="single-heading" class="visually-hidden">Check one label</h2>
+
+      <div class="example-bar">
+        <label for="example-select">Try an example:</label>
+        <select id="example-select">
+          <option value="clean_spirits">Compliant bourbon label</option>
+          <option value="brand_case_diff">Brand in different capitals (STONE'S THROW)</option>
+          <option value="abv_mismatch">Wrong alcohol content (40% vs 45%)</option>
+          <option value="warning_title_case">Warning heading not in capitals</option>
+        </select>
+        <button type="button" id="load-example" class="secondary">Load example</button>
+      </div>
+
+      <form id="verify-form" novalidate>
+        <div class="columns">
+          <div class="col">
+            <h3>1. Label image</h3>
+            <label id="drop-zone" class="drop-zone" for="image-input" tabindex="0">
+              <span id="drop-text">Drag the label image here, or <u>click to choose a file</u>.<br>
+                <small>JPEG, PNG or WebP, up to 10 MB.</small></span>
+              <img id="preview" alt="Preview of the selected label" hidden>
+            </label>
+            <input type="file" id="image-input" name="image" accept="image/jpeg,image/png,image/webp" class="visually-hidden">
+            <p id="file-name" class="file-name" aria-live="polite"></p>
+          </div>
+
+          <div class="col">
+            <h3>2. What the application says</h3>
+            <div class="field">
+              <label for="brand_name">Brand name</label>
+              <input id="brand_name" name="brand_name" placeholder="e.g. OLD TOM DISTILLERY" required>
+            </div>
+            <div class="field">
+              <label for="class_type">Class / type</label>
+              <input id="class_type" name="class_type" placeholder="e.g. Kentucky Straight Bourbon Whiskey" required>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="alcohol_content">Alcohol content</label>
+                <input id="alcohol_content" name="alcohol_content" placeholder="e.g. 45% Alc./Vol. (90 Proof)" required>
+              </div>
+              <div class="field">
+                <label for="net_contents">Net contents</label>
+                <input id="net_contents" name="net_contents" placeholder="e.g. 750 mL" required>
+              </div>
+            </div>
+            <div class="field">
+              <label for="producer_name_address">Producer name and address</label>
+              <input id="producer_name_address" name="producer_name_address" placeholder="e.g. Old Tom Distillery, Bardstown, Kentucky" required>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="beverage_type">Beverage type</label>
+                <select id="beverage_type" name="beverage_type">
+                  <option value="spirits">Distilled spirits</option>
+                  <option value="wine">Wine</option>
+                  <option value="beer">Beer / malt beverage</option>
+                </select>
+              </div>
+              <div class="field checkbox-field">
+                <input type="checkbox" id="is_import" name="is_import">
+                <label for="is_import">Imported?</label>
+              </div>
+            </div>
+            <div class="field" id="country-field" hidden>
+              <label for="country_of_origin">Country of origin</label>
+              <input id="country_of_origin" name="country_of_origin" placeholder="e.g. Scotland">
+            </div>
+            <div class="field">
+              <label for="provider">Engine</label>
+              <select id="provider" name="provider"></select>
+              <p id="provider-note" class="hint"></p>
+            </div>
+          </div>
+        </div>
+
+        <div id="form-error" class="error" role="alert" hidden></div>
+        <button type="submit" id="verify-btn" class="primary">Verify label</button>
+      </form>
+    </section>
+
+    <section id="results" class="panel" aria-live="polite" hidden>
+      <div id="banner" class="banner"></div>
+      <p id="result-message" class="result-message" hidden></p>
+      <table class="checks">
+        <caption class="visually-hidden">Field-by-field results</caption>
+        <thead>
+          <tr><th scope="col">Result</th><th scope="col">Field</th><th scope="col">Application says</th><th scope="col">Label says</th><th scope="col">Why</th></tr>
+        </thead>
+        <tbody id="checks-body"></tbody>
+      </table>
+      <div class="not-checked">
+        <h3>Not checked by this tool</h3>
+        <ul id="not-checked-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Images and text are processed in memory and not stored. This tool assists reviewers; it does not replace their judgment.</p>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

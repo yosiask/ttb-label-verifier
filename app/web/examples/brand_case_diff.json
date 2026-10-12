@@ -1,0 +1,13 @@
+{
+  "description": "Label says STONE'S THROW, application says Stone's Throw: cosmetic only.",
+  "application": {
+    "brand_name": "Stone's Throw",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol_content": "45% Alc./Vol. (90 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Riverside Spirits Co., Portland, Oregon",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  }
+}

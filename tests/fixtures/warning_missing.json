@@ -1,0 +1,44 @@
+{
+  "case": "warning_missing",
+  "description": "No government warning on the label.",
+  "label": {
+    "brand": "OLD TOM DISTILLERY",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol": "45% Alc./Vol. (90 Proof)",
+    "net": "750 mL",
+    "producer": "Distilled and Bottled by Old Tom Distillery, Bardstown, Kentucky",
+    "country": null,
+    "warning": null,
+    "heading_bold": true,
+    "body_bold": false
+  },
+  "application": {
+    "brand_name": "OLD TOM DISTILLERY",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol_content": "45% Alc./Vol. (90 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Old Tom Distillery, Bardstown, Kentucky",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "local_ocr": {
+      "overall": [
+        "fail"
+      ],
+      "fields": {
+        "government_warning": "fail"
+      }
+    },
+    "azure_vision": {
+      "overall": [
+        "fail"
+      ],
+      "fields": {
+        "government_warning": "fail"
+      }
+    }
+  },
+  "degradation": null
+}
