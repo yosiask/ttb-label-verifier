@@ -87,7 +87,11 @@ def check_warning(
     word_confidences: list[tuple[str, float]],
     label_low_confidence: bool,
     t: Thresholds = THRESHOLDS,
+    reader_sees_bold: bool = False,
+    weight_ratio: float | None = None,
 ) -> FieldCheck:
+    """weight_ratio: heading/body stroke weight measured from pixels by offline OCR (stroke.py),
+    an independent check on the reader's bold judgment. None when not measured."""
     steps: list[dict] = []
 
     def result(status: Status, reason: str, rule: str, found: str | None, **extra) -> FieldCheck:
@@ -182,20 +186,43 @@ def check_warning(
     steps.append({"step": "wording", "status": wording_status.value, "reason": wording_reason})
     statuses.append(wording_status)
 
-    # 4. Bold: heading bold, body not bold. Unknown never counts as verified.
+    # 4. Bold: heading bold, body not bold. Unknown never counts as verified. When the pixels
+    # were measured, they must agree with the reader before a bold result is trusted either way.
+    heavier = weight_ratio is not None and weight_ratio >= t.bold_heavier_ratio
+    same = weight_ratio is not None and weight_ratio <= t.bold_same_ratio
+    bold_measured_conflict = False
+    confirm = "Confirm by eye that \"GOVERNMENT WARNING:\" is bold and the rest is not."
     if heading_bold is False or body_bold is True:
-        bold_status = Status.FAIL
         parts = []
         if heading_bold is False:
             parts.append("\"GOVERNMENT WARNING:\" is not in bold type")
         if body_bold is True:
             parts.append("the rest of the warning is in bold type; it must not be")
-        bold_reason = "Formatting problem: " + " and ".join(parts) + "."
+        if heavier:
+            bold_status, bold_measured_conflict = Status.NEEDS_REVIEW, True
+            bold_reason = (f"The reader reported that {' and '.join(parts)}, but the heading's strokes measure "
+                           f"clearly heavier than the body's. {confirm}")
+        else:
+            bold_status = Status.FAIL
+            bold_reason = "Formatting problem: " + " and ".join(parts) + "."
     elif heading_bold is None or body_bold is None:
         bold_status = Status.NEEDS_REVIEW
-        bold_reason = "Confirm by eye that \"GOVERNMENT WARNING:\" is bold and the rest is not (this engine cannot see type weight)."
+        bold_reason = ("The reader could not tell the type weight; confirm by eye that \"GOVERNMENT WARNING:\" "
+                       "is bold and the rest is not." if reader_sees_bold else
+                       "Confirm by eye that \"GOVERNMENT WARNING:\" is bold and the rest is not "
+                       "(this engine cannot see type weight).")
+        if same:
+            bold_measured_conflict = True
+            bold_reason += " The heading's strokes measure the same weight as the body's, so it may not be bold."
+    elif weight_ratio is not None and not heavier:
+        bold_status, bold_measured_conflict = Status.NEEDS_REVIEW, True
+        bold_reason = ("The reader reported the heading bold and the body regular, but the heading's strokes "
+                       + ("measure the same weight as the body's. " if same else
+                          "do not measure clearly heavier than the body's. ") + confirm)
     else:
-        bold_status, bold_reason = Status.PASS, "Heading is bold and the rest is not."
+        bold_status = Status.PASS
+        bold_reason = "Heading is bold and the rest is not" + (
+            " (confirmed by measuring stroke weight)." if heavier else ".")
     steps.append({"step": "bold", "status": bold_status.value, "reason": bold_reason})
     statuses.append(bold_status)
 
@@ -206,13 +233,15 @@ def check_warning(
     elif Status.NEEDS_REVIEW in statuses:
         overall = Status.NEEDS_REVIEW
         if heading_status == Status.PASS and wording_status == Status.PASS:
-            reason = "Wording verified; confirm \"GOVERNMENT WARNING:\" is bold and the rest is not."
+            reason = (f"Wording verified. {bold_reason}" if bold_measured_conflict else
+                      "Wording verified; confirm \"GOVERNMENT WARNING:\" is bold and the rest is not.")
         else:
             reason = " ".join(r for s, r in step_reasons if s == Status.NEEDS_REVIEW)
     else:
         overall, reason = Status.PASS, "Warning text is word for word correct, heading in capitals and bold, body not bold."
 
-    return result(overall, reason, "exact wording, capitals, bold (27 CFR 16.21-16.22)", found_text, diff=diff)
+    extra = {"heading_body_weight_ratio": weight_ratio} if weight_ratio is not None else {}
+    return result(overall, reason, "exact wording, capitals, bold (27 CFR 16.21-16.22)", found_text, diff=diff, **extra)
 
 
 def _describe_diff(diff: list[dict]) -> str:

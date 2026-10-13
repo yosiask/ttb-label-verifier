@@ -153,6 +153,7 @@ def test_oversized_body_rejected_before_parsing(monkeypatch):
     monkeypatch.setattr(routes, "get_extractor", lambda *a, **k: called.append(1))
     r = post(image=b"x" * (3 * 1024 * 1024))
     assert r.status_code == 413 and r.json()["error_code"] == "file_too_large"
+    assert "larger than 1 MB" in r.json()["message"]  # the image limit, not the request limit
     assert not called
 
 

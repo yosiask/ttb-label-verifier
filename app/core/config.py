@@ -38,5 +38,10 @@ class Thresholds:
     warning_noise_max_edits: int = 3
     warning_noise_word_conf: float = 80  # 0..100
 
+    # Bold cross-check (heading stroke / body stroke from pixels). Fixtures: bold heading over a
+    # regular body 1.8-2.0; same weight 0.95-1.03; blur and low resolution pull it toward 1.
+    bold_heavier_ratio: float = 1.4  # at or above: heading clearly heavier than body
+    bold_same_ratio: float = 1.15  # at or below: heading and body look the same weight
+
 
 THRESHOLDS = Thresholds()

@@ -204,6 +204,10 @@ CASES = [
     case("warning_body_bold", "Whole warning in bold; the body must not be bold. Only the vision engine can see this.",
          label={"body_bold": True},
          local=exp("needs_review", {**ALL_PASS, **BOLD_REVIEW}), vision=exp("fail", {"government_warning": "fail"})),
+    case("warning_heading_not_bold", "Warning heading printed in regular type; it must be bold. Only the vision "
+         "engine can see this. Guards against a reader that always reports the heading as bold.",
+         label={"heading_bold": False},
+         local=exp("needs_review", {**ALL_PASS, **BOLD_REVIEW}), vision=exp("fail", {"government_warning": "fail"})),
     case("brand_only_in_address", "Application brand appears only inside the producer line.",
          label={"brand": "RIVER BEND", "producer": "Bottled by Stone's Throw Distillery, Frankfort, Kentucky"},
          app={"brand_name": "STONE'S THROW", "producer_name_address": "Stone's Throw Distillery, Frankfort, Kentucky"},

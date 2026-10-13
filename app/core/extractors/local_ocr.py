@@ -10,6 +10,7 @@ from PIL import Image
 
 from ..models import ExtractedLabel
 from ..preprocess import prepare_for_ocr
+from ..stroke import heading_weight_ratio
 from .base import ProviderUnavailableError
 
 _ALNUM = re.compile(r"[^A-Za-z0-9]")
@@ -27,22 +28,23 @@ def tesseract_available() -> bool:
         return False
 
 
-def _run(gray, psm: int, timeout: float) -> tuple[list[list[tuple[str, float]]], float]:
-    """OCR once. Returns lines of (word, confidence 0..100) and a 0..1 readability score."""
+def _run(gray, psm: int, timeout: float) -> tuple[list[list[tuple[str, float, tuple]]], float]:
+    """OCR once. Returns lines of (word, confidence 0..100, box) and a 0..1 readability score."""
     data = pytesseract.image_to_data(
         gray, config=f"--oem 1 --psm {psm}", output_type=pytesseract.Output.DICT, timeout=timeout
     )
-    lines: dict[tuple[int, int, int], list[tuple[str, float]]] = {}
+    lines: dict[tuple[int, int, int], list[tuple[str, float, tuple]]] = {}
     for i, text in enumerate(data["text"]):
         text = (text or "").strip()
         conf = float(data["conf"][i])
         if not text or conf < 0:
             continue
         key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
-        lines.setdefault(key, []).append((text, conf))
+        box = (data["left"][i], data["top"][i], data["width"][i], data["height"][i])
+        lines.setdefault(key, []).append((text, conf, box))
     ordered = [lines[k] for k in sorted(lines)]
     # Character-weighted mean so stray one-letter specks do not dominate.
-    weights = [(len(_key(w)) or 1, c) for line in ordered for w, c in line]
+    weights = [(len(_key(w)) or 1, c) for line in ordered for w, c, _ in line]
     total = sum(n for n, _ in weights)
     score = sum(n * c for n, c in weights) / total / 100 if total else 0.0
     return ordered, score
@@ -96,13 +98,17 @@ class LocalOcrExtractor:
                 notes.append("used single-block page layout")
         t2 = time.perf_counter()
 
-        flat = [wc for line in lines for wc in line]
+        flat = [(w, c) for line in lines for w, c, _ in line]
+        boxes = [b for line in lines for _, _, b in line]
         words = [w for w, _ in flat]
         span = find_warning(words)
         warning_text = " ".join(words[span[0]:span[1] + 1]) if span else None
+        ratio = None
+        if span and _key(words[span[0]]) == "GOVERNMENT" and span[1] - span[0] > 8:
+            ratio = heading_weight_ratio(gray, boxes[span[0]:span[0] + 2], boxes[span[0] + 2:span[1] + 1])
         return ExtractedLabel(
             provider="local_ocr",
-            full_text="\n".join(" ".join(w for w, _ in line) for line in lines),
+            full_text="\n".join(" ".join(w for w, _, _ in line) for line in lines),
             fields={},
             warning_text=warning_text,
             warning_heading_bold=None,  # OCR text carries no type weight
@@ -112,4 +118,5 @@ class LocalOcrExtractor:
             extraction_ms=int((t2 - t1) * 1000),
             preprocess_ms=int((t1 - t0) * 1000),
             notes=notes,
+            warning_weight_ratio=ratio,
         )

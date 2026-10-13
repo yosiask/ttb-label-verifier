@@ -9,7 +9,7 @@ from .extractors.base import LabelExtractor
 from .label_text import LabelText
 from .models import ApplicationData, ExtractedLabel, FieldCheck, Status, VerificationResult
 from .preprocess import load_image
-from .quality import assess_quality, too_small_to_read
+from .quality import BLUR_BELOW, assess_quality, too_small_to_read
 from .rules.abv import check_alcohol
 from .rules.net_contents import check_net_contents
 from .rules.text_fields import check_country, match_text_field, resolve_shared_lines
@@ -63,7 +63,9 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
                       f.get("country_of_origin"), low_conf, t),
         cross_check_warning(
             check_warning(extracted.warning_text, extracted.warning_heading_bold, extracted.warning_body_bold,
-                          extracted.word_confidences, low_conf, t),
+                          extracted.word_confidences, low_conf, t,
+                          reader_sees_bold=extracted.provider == "azure_vision",
+                          weight_ratio=extracted.cross_check.warning_weight_ratio if extracted.cross_check else None),
             extracted.cross_check, t),
     ]
 
@@ -125,6 +127,10 @@ def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExt
     t1 = time.perf_counter()
     extracted = extractor.extract(image)
     t2 = time.perf_counter()
+    if extracted.cross_check is not None and quality.sharpness < BLUR_BELOW:
+        # Blur thickens every stroke alike, so the weight measurement says nothing on a blurry photo.
+        extracted = extracted.model_copy(update={
+            "cross_check": extracted.cross_check.model_copy(update={"warning_weight_ratio": None})})
     checks, readable = evaluate(application, extracted, t)
     if readable and too_small_to_read(quality):
         checks, readable = evaluate(application, extracted.model_copy(update={"confidence": 0.0}), t)

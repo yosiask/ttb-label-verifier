@@ -1,6 +1,7 @@
 """Application-only deployment tool against a fake Azure CLI: no Azure calls, no cost."""
 
 import copy
+import json
 import importlib.util
 import sys
 from pathlib import Path
@@ -204,3 +205,40 @@ def test_deploy_without_confirm_changes_nothing(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Dry run" in out and "CLOUD_REQUESTS_PER_MINUTE=2" in out
     assert not any("update" in c for c in az.calls)
+
+
+def test_deploy_clears_placeholder_start_command(monkeypatch):
+    """A placeholder image's command (e.g. /http-echo) must not survive the image swap."""
+    w = copy.deepcopy(WORLD)
+    w[("containerapp", "show")]["properties"]["template"]["containers"][0].update(
+        command=["/http-echo"], args=["-listen=:8000"])
+    w[("containerapp", "update")] = {}
+    az = FakeAz(w)
+    plan = ad.check(az, RG)
+    assert levels(plan)["Start command"] == "INFO" and plan.ok
+    monkeypatch.setattr(ad, "smoke", lambda fqdn: [])
+    az.world[("containerapp", "show")]["properties"]["template"]["containers"][0]["env"] = [
+        {"name": "KEEP_ME", "value": "1"}, {"name": "EXTRACTOR", "value": "local"}]
+    sent = {}
+
+    def capture(args):
+        if args[:2] == ["containerapp", "update"]:
+            sent.update(json.load(open(args[args.index("--yaml") + 1])))
+        return az(args)
+
+    ad.deploy(capture, plan, RG, "abc123", 4500, skip_build=True)
+    c = sent["properties"]["template"]["containers"][0]
+    assert "command" not in c and "args" not in c
+    assert c["image"] == "acrttb.azurecr.io/ttb-label-verifier:abc123"
+    env = {e["name"]: e["value"] for e in c["env"]}
+    assert env["KEEP_ME"] == "1" and env["EXTRACTOR"] == "auto" and env["AZURE_OPENAI_DEPLOYMENT"] == "gpt-41-mini"
+    assert c["resources"] == {"cpu": 1.0, "memory": "2Gi"}
+    assert sent["properties"]["template"]["scale"] == {"minReplicas": 0, "maxReplicas": 2}
+
+
+def test_150k_tpm_is_not_flagged():
+    w = copy.deepcopy(WORLD)
+    w[("cognitiveservices", "account", "deployment", "list")][0]["sku"]["capacity"] = 150
+    plan = ad.check(FakeAz(w), RG)
+    assert levels(plan)["Model quota"] == "INFO"
+    assert ad.app_settings(plan, 4500)["CLOUD_REQUESTS_PER_MINUTE"] == "13"

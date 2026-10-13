@@ -126,8 +126,10 @@ class BodySizeLimit:
     """ASGI middleware: refuse request bodies over the limit before they are parsed,
     whether or not the client sends Content-Length."""
 
-    def __init__(self, app, max_bytes_fn):
+    def __init__(self, app, max_bytes_fn, shown_mb_fn=None):
+        """shown_mb_fn: the limit to tell the user (the image limit, not the whole-request one)."""
         self.app, self.max_bytes_fn = app, max_bytes_fn
+        self.shown_mb_fn = shown_mb_fn or (lambda: max_bytes_fn() // (1024 * 1024))
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH"):
@@ -139,7 +141,7 @@ class BodySizeLimit:
         except ValueError:
             declared = 0
         if declared > limit:
-            return await _too_large(send, limit)
+            return await _too_large(send, self.shown_mb_fn())
 
         received = 0
 
@@ -155,18 +157,18 @@ class BodySizeLimit:
         try:
             await self.app(scope, limited_receive, send)
         except _BodyTooLarge:
-            await _too_large(send, limit)
+            await _too_large(send, self.shown_mb_fn())
 
 
 class _BodyTooLarge(Exception):
     pass
 
 
-async def _too_large(send, limit: int) -> None:
+async def _too_large(send, shown_mb: float) -> None:
     import json
 
     body = json.dumps({"error_code": "file_too_large",
-                       "message": f"The upload is larger than {limit // (1024 * 1024)} MB. "
+                       "message": f"The image is larger than {shown_mb:g} MB. "
                                   "Use a smaller photo or lower resolution."}).encode()
     await send({"type": "http.response.start", "status": 413,
                 "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})

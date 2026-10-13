@@ -25,8 +25,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -236,6 +238,10 @@ def check(az: Callable, rg: str, app: str | None = None, registry: str | None = 
         plan.add(WARN, "Ingress", "allowInsecure is on; HTTPS-only is expected.")
 
     containers = template.get("containers") or [{}]
+    if containers[0].get("command") or containers[0].get("args"):
+        plan.add(INFO, "Start command", f"the app overrides the image's start command "
+                 f"({' '.join(containers[0].get('command') or [])} {' '.join(containers[0].get('args') or [])}".rstrip()
+                 + "); deploy clears it so the image's own command runs.")
     res = containers[0].get("resources") or {}
     plan.cpu = float(res.get("cpu") or 0)
     mem = float(str(res.get("memory") or "0Gi").rstrip("Gi") or 0)
@@ -299,12 +305,12 @@ def _finish_quota(plan: Plan, tokens_per_label: int) -> Plan:
         total = pace_per_replica(plan.capacity_k, 1, tokens_per_label)
         paced = (f"the app paces {pace_per_replica(plan.capacity_k, plan.max_replicas, tokens_per_label)}/min "
                  f"per replica x {plan.max_replicas}" if plan.max_replicas else "per-replica pace set once the app exists")
-        level = WARN if total < 30 else INFO
+        level = WARN if total < 15 else INFO
         plan.add(level, "Model quota",
                  f"{plan.capacity_k}K tokens/min ({plan.capacity_k} requests/min) is about {total} labels/min in "
                  f"total at ~{tokens_per_label} counted tokens per label; {paced}. Labels over the pace use "
-                 "offline OCR (safe: never a false Pass; bold shows Needs review)." + (" A 300-label batch would mostly run offline; raising the deployment's "
-                 "TPM has no fixed cost on Standard." if level == WARN else ""))
+                 "offline OCR (safe: never a false Pass; bold shows Needs review)." + (" At this rate a 300-label batch would mostly run offline; raising the "
+                 "deployment's TPM has no fixed cost on Standard." if level == WARN else ""))
     return plan
 
 
@@ -378,8 +384,25 @@ def deploy(az_cmd: Callable, plan: Plan, rg: str, tag: str, tokens_per_label: in
     print(f"== Updating container app {plan.app} to {image}")
     for k, v in sorted(env.items()):
         print(f"   {k}={v}")
-    az_cmd(["containerapp", "update", "--resource-group", rg, "--name", plan.app, "--image", image,
-            "--set-env-vars", *[f"{k}={v}" for k, v in sorted(env.items())]])
+    # The update is sent as a spec built from the app's current template: the CLI flags cannot
+    # remove a start command left by a placeholder image (--command "" stores [""]), and the
+    # container must run the image's own CMD. Everything else in the template is kept.
+    current = az_cmd(["containerapp", "show", "--resource-group", rg, "--name", plan.app])
+    template = json.loads(json.dumps(current["properties"]["template"]))
+    template.pop("revisionSuffix", None)
+    container = template["containers"][0]
+    container.pop("command", None)
+    container.pop("args", None)
+    container["image"] = image
+    kept = [e for e in container.get("env") or [] if e.get("name") not in env]
+    container["env"] = kept + [{"name": k, "value": v} for k, v in sorted(env.items())]
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        json.dump({"properties": {"template": template}}, f)  # JSON is valid YAML
+        spec_path = f.name
+    try:
+        az_cmd(["containerapp", "update", "--resource-group", rg, "--name", plan.app, "--yaml", spec_path])
+    finally:
+        os.unlink(spec_path)
     print(f"== Smoke test (health and config only; no model calls) https://{plan.fqdn}")
     problems = smoke(plan.fqdn)
     for p in problems:

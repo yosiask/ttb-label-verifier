@@ -44,8 +44,10 @@ class SimulatedVision:
                     "net_contents": lab["net"], "producer_name_address": lab["producer"],
                     "country_of_origin": lab.get("country")},
             warning_text=warning,
-            warning_heading_bold=lab["heading_bold"] if warning else None,
-            warning_body_bold=lab["body_bold"] if warning else None,
+            # Autocorrecting also reports textbook formatting, as the live model did 1 time in 5 on a
+            # regular-weight heading (2026-10-13).
+            warning_heading_bold=(True if self.autocorrect else lab["heading_bold"]) if warning else None,
+            warning_body_bold=(False if self.autocorrect else lab["body_bold"]) if warning else None,
             confidence=0.95, extraction_ms=0,
         )
 
@@ -77,6 +79,17 @@ VIOLATIONS = [c for c in CASES
 
 @pytest.mark.parametrize("case", VIOLATIONS)
 def test_autocorrecting_vision_never_turns_a_violation_into_pass(case):
-    """Worst case: the model silently 'fixes' the warning to the standard text."""
+    """Worst case: the model silently 'fixes' the warning to the standard text and reports the
+    standard formatting (heading bold, body regular) whatever the label shows."""
     _, r = run(case, autocorrect=True)
     assert r.overall.value != "pass", [(c.field, c.status.value, c.reason) for c in r.checks]
+
+
+@pytest.mark.parametrize("case,low,high", [
+    ("clean_spirits", 1.4, 3.0), ("warning_heading_not_bold", 0.0, 1.15), ("warning_body_bold", 0.0, 1.15),
+])
+def test_offline_reader_measures_heading_weight(case, low, high):
+    meta = json.loads((FIXTURES / f"{case}.json").read_text())
+    from app.core.preprocess import load_image
+    r = LocalOcrExtractor().extract(load_image((FIXTURES / meta["image"]).read_bytes()))
+    assert r.warning_weight_ratio is not None and low <= r.warning_weight_ratio <= high, r.warning_weight_ratio

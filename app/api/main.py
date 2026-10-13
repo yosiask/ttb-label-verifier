@@ -32,6 +32,7 @@ async def security_headers(request, call_next):
 
 
 # Whole-request cap: the image limit plus 1 MB for the form fields and multipart overhead.
-app.add_middleware(BodySizeLimit, max_bytes_fn=lambda: max_upload_bytes() + 1024 * 1024)
+app.add_middleware(BodySizeLimit, max_bytes_fn=lambda: max_upload_bytes() + 1024 * 1024,
+                   shown_mb_fn=lambda: max_upload_bytes() / (1024 * 1024))
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

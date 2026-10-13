@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.models import Status
 from app.core.warning import CANONICAL_WARNING, check_warning
 
@@ -116,3 +118,32 @@ def test_punctuation_rule_does_not_hide_word_changes():
 
 def test_case_change_is_not_punctuation():
     assert check(CANONICAL_WARNING.replace("Consumption", "consumption")).status == Status.FAIL
+
+
+def test_unknown_bold_reason_names_the_cause():
+    from app.core.warning import CANONICAL_WARNING as W, check_warning
+
+    ocr = check_warning(W, None, None, [], False)
+    vision = check_warning(W, None, False, [], False, reader_sees_bold=True)
+    assert ocr.status.value == vision.status.value == "needs_review"
+    assert "cannot see type weight" in ocr.details["steps"][-1]["reason"]
+    assert "could not tell" in vision.details["steps"][-1]["reason"]
+
+
+@pytest.mark.parametrize("hb,bb,ratio,status,phrase", [
+    (True, False, 1.8, "pass", "confirmed by measuring"),
+    (True, False, None, "pass", "Heading is bold"),
+    (True, False, 1.0, "needs_review", "same weight"),       # the live false-pass case
+    (True, False, 1.27, "needs_review", "clearly heavier"),  # unsure band
+    (False, False, 1.0, "fail", "not in bold"),
+    (True, True, 1.0, "fail", "must not be"),
+    (False, False, 1.8, "needs_review", "measure clearly heavier"),  # reader's defect contradicted
+    (None, False, 1.0, "needs_review", "may not be bold"),
+    (None, None, None, "needs_review", "could not tell"),
+])
+def test_bold_needs_pixels_and_reader_to_agree(hb, bb, ratio, status, phrase):
+    from app.core.warning import CANONICAL_WARNING as W, check_warning
+
+    r = check_warning(W, hb, bb, [], False, reader_sees_bold=True, weight_ratio=ratio)
+    assert r.status.value == status
+    assert phrase in r.reason or phrase in r.details["steps"][-1]["reason"], r.reason

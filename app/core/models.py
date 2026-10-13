@@ -60,6 +60,9 @@ class ExtractedLabel(BaseModel):
     # disagreements, e.g. a vision model "correcting" an altered warning to the standard text.
     cross_check: ExtractedLabel | None = None
     fallback_reason: str | None = None  # set when this reading replaced a provider that failed
+    # Offline OCR only: warning heading stroke / body stroke measured from pixels (see stroke.py).
+    # About 1.8 for a bold heading over a regular body; about 1.0 when both have the same weight.
+    warning_weight_ratio: float | None = None
 
 
 class ImageQuality(BaseModel):
