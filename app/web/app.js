@@ -280,7 +280,7 @@ function renderDiff(diff) {
 
 // The warning is long: show its start here; the full text is in the word diff under "Why".
 function labelSays(c) {
-  if (c.found === null || c.found === undefined) return "Not found";
+  if (c.found === null || c.found === undefined) return c.status === "n/a" ? "—" : "Not found";
   if (c.field !== "government_warning") return c.found;
   const words = c.found.split(/\s+/);
   return words.length > 6 ? `${words.slice(0, 6).join(" ")} … (full text under “Show warning details”)` : c.found;

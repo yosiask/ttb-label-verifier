@@ -20,7 +20,7 @@ NOT_CHECKED = [
     "Government warning type size (27 CFR 16.22(b): 1 mm, 2 mm or 3 mm depending on container size).",
     "Whether the warning is readily legible, on a contrasting background, and separate and apart from other text.",
     "Placement of statements on the label (same field of vision, brand label vs back label).",
-    "Mandatory statements not in this form (e.g. sulfite, colouring or age statements).",
+    "Mandatory statements not in this form (e.g. sulfite, coloring or age statements).",
 ]
 
 UNREADABLE_MESSAGE = "We couldn't read this label clearly. Request a better image."
