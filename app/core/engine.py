@@ -13,7 +13,7 @@ from .preprocess import load_image
 from .quality import BLUR_BELOW, assess_quality, too_small_to_read
 from .rules.abv import check_alcohol
 from .rules.net_contents import check_net_contents
-from .rules.text_fields import check_country, match_text_field, resolve_shared_lines
+from .rules.text_fields import check_country, closeup_misspelling, match_text_field, resolve_shared_lines
 from .warning import check_warning
 
 NOT_CHECKED = [
@@ -57,6 +57,7 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
             f.get("producer_name_address"), low_conf, t.producer_pass, t.producer_review, "token", t),
     }
     resolve_shared_lines(matches)
+    _closeup_class_check(matches["class_type"].check, application.class_type, extracted)
 
     checks = [
         matches["brand_name"].check,
@@ -83,6 +84,22 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
                 c.status = Status.NEEDS_REVIEW
                 c.reason = "The image is too hard to read to confirm this. Request a better image."
     return checks, readable
+
+
+def _closeup_class_check(check: FieldCheck, expected: str, extracted: ExtractedLabel) -> None:
+    """A class/type Pass is held for review when the offline reader's close-up re-read shows a word
+    one letter different (registry: both readers read "BOUBON" as "BOURBON"; the close-up did not)."""
+    if check.status != Status.PASS:
+        return
+    closeups = extracted.closeup_lines + (extracted.cross_check.closeup_lines if extracted.cross_check else [])
+    hit = closeup_misspelling(expected, closeups)
+    if hit:
+        word, seen, line = hit
+        check.status = Status.NEEDS_REVIEW
+        check.reason = (f"Read close up, the label may say \"{seen.upper()}\" where the application says "
+                        f"\"{word.upper()}\" (\"{line}\"). Readers tend to correct misspellings; check the "
+                        "spelling by eye.")
+        check.details["closeup"] = {"expected": word, "seen": seen, "line": line}
 
 
 def _trusted_weight_ratio(ocr: ExtractedLabel | None, t: Thresholds) -> float | None:
@@ -191,6 +208,7 @@ def merge_readings(readings: list[ExtractedLabel]) -> ExtractedLabel:
         cross_check=merged_cross,
         fallback_reason=" ".join(fallbacks) or None,
         warning_weight_ratio=panel.warning_weight_ratio,
+        closeup_lines=[ln for r in readings for ln in r.closeup_lines],
         token_usage=usage or None,
     )
 

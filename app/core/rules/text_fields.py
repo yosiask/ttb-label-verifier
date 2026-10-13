@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
+from rapidfuzz.distance import Levenshtein
 
 from ..config import THRESHOLDS, Thresholds
 from ..label_text import LabelText, Span
@@ -256,6 +257,25 @@ def _producer_name_only(field: str, expected_raw: str, label: LabelText) -> str 
     for span in label.spans:
         if _contains_run(name, span.norm.split()):
             return span.text
+    return None
+
+
+def closeup_misspelling(expected_raw: str, closeups: list[str]) -> tuple[str, str, str] | None:
+    """A word of the application value that a close-up re-read shows one letter different, on a
+    line that also has another application word and not the word itself: (expected, seen, line).
+    Exactly one letter, so ordinary misreads two letters off ("AGED" / "LAGER") do not count."""
+    words = [w for w in normalize(expected_raw).split() if len(w) >= 4]
+    for line in closeups:
+        seen = normalize(line).split()
+        for w in words:
+            if w in seen:
+                continue
+            others = [x for x in words if x != w]
+            if others and not any(x in seen for x in others):
+                continue
+            near = next((v for v in seen if len(v) >= 4 and Levenshtein.distance(w, v) == 1), None)
+            if near:
+                return w, near, clean(line)
     return None
 
 

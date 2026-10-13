@@ -223,3 +223,23 @@ def test_production_phrase_is_not_a_country_statement():
     label = LabelText.from_full_text("Double distilled in a traditional\nCharentais pot still\nBOLOGNA-ITALIA")
     assert check_country("Italy", True, label, None, False).status == Status.NEEDS_REVIEW
     assert check_country("Italy", True, label, "Double distilled in a traditional", False).status == Status.NEEDS_REVIEW
+
+
+# --- Close-up re-read (registry: both readers read "BOUBON" as "BOURBON")
+
+from app.core.rules.text_fields import closeup_misspelling  # noqa: E402
+
+
+def test_closeup_one_letter_variant_found():
+    hit = closeup_misspelling("Kentucky Bourbon Whiskey Finished with Port Staves", ["= KENTUCKY BOUBON WHISKEY =="])
+    assert hit == ("bourbon", "boubon", "= KENTUCKY BOUBON WHISKEY ==")
+
+
+@pytest.mark.parametrize("expected,lines", [
+    ("Kentucky Bourbon Whiskey", ["KENTUCKY BOURBON WHISKEY"]),            # read as printed
+    ("Barrel-Aged Maibock Lager", ["LAGER WITH NATURAL FLAVORS"]),         # 'aged'/'lager': two letters
+    ("Hazy India Pale Ale", ["is crazy Turtle hazy naa pale"]),            # word itself present
+    ("Kentucky Bourbon Whiskey", ["BOUBON"]),                              # no other application word on the line
+])
+def test_closeup_no_false_alarm(expected, lines):
+    assert closeup_misspelling(expected, lines) is None

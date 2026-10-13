@@ -82,9 +82,17 @@ def rotate(gray: np.ndarray, angle: float) -> np.ndarray:
 
 def prepare_for_ocr(img: Image.Image) -> tuple[np.ndarray, list[str]]:
     """Return a grayscale array ready for Tesseract, plus notes on what was done."""
+    gray, _, notes = prepare_for_ocr_with_plain(img)
+    return gray, notes
+
+
+def prepare_for_ocr_with_plain(img: Image.Image) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """As prepare_for_ocr, plus the same pixels without contrast enhancement or inversion, in the
+    same geometry: close-up re-reads of decorative type read some letters better from it."""
     notes: list[str] = []
     gray = np.array(img.convert("L"))
     gray = resize_for_ocr(gray)
+    plain = gray.copy()
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
     # Labels with light text on a dark background read better inverted.
@@ -94,5 +102,6 @@ def prepare_for_ocr(img: Image.Image) -> tuple[np.ndarray, list[str]]:
     angle = estimate_skew(gray)
     if abs(angle) >= 0.5:
         gray = rotate(gray, angle)
+        plain = rotate(plain, angle)
         notes.append(f"straightened by {angle:+.1f} degrees")
-    return gray, notes
+    return gray, plain, notes

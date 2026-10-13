@@ -63,6 +63,10 @@ class ExtractedLabel(BaseModel):
     # Offline OCR only: warning heading stroke / body stroke measured from pixels (see stroke.py).
     # About 1.8 for a bold heading over a regular body; about 1.0 when both have the same weight.
     warning_weight_ratio: float | None = None
+    # Offline OCR only: lines holding class/type words, re-read close up from unenhanced pixels.
+    # Readers normalize misspellings toward familiar words ("BOUBON" read as "BOURBON"); a second,
+    # magnified reading sometimes keeps the letters as printed.
+    closeup_lines: list[str] = []
     # Cloud only: tokens billed for the call, e.g. {"prompt_tokens": 2900, "completion_tokens": 410}.
     token_usage: dict[str, int] | None = None
 

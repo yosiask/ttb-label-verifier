@@ -5,15 +5,24 @@ from __future__ import annotations
 import re
 import time
 
+import cv2
 import pytesseract
 from PIL import Image
 
 from ..models import ExtractedLabel
-from ..preprocess import prepare_for_ocr
+from ..preprocess import prepare_for_ocr_with_plain
 from ..stroke import heading_weight_ratio
 from .base import ProviderUnavailableError
 
 _ALNUM = re.compile(r"[^A-Za-z0-9]")
+# Words of class/type statements that readers tend to "correct" toward (the reader is blind to the
+# application; these lines are simply re-read close up).
+CLASS_WORDS = {"BOURBON", "WHISKEY", "WHISKY", "VODKA", "GIN", "RUM", "TEQUILA", "BRANDY", "COGNAC", "MEZCAL",
+               "LIQUEUR", "WINE", "ALE", "LAGER", "BEER", "PILSNER", "STOUT", "PORTER", "CIDER", "SAKE", "SCOTCH",
+               "RYE", "STRAIGHT", "BLENDED", "IPA", "MALT", "KENTUCKY", "TENNESSEE"}
+MAX_CLOSEUPS = 3
+CLOSEUP_LINE_PX = 80  # bring every line to about this height (small type enlarged at most 2x)
+CLOSEUP_MAX_PIXELS = 2_500_000
 
 
 def _key(word: str) -> str:
@@ -48,6 +57,42 @@ def _run(gray, psm: int, timeout: float) -> tuple[list[list[tuple[str, float, tu
     total = sum(n for n, _ in weights)
     score = sum(n * c for n, c in weights) / total / 100 if total else 0.0
     return ordered, score
+
+
+def closeup_lines(plain, lines, skip: set[int], timeout: float) -> list[str]:
+    """Re-read each short line holding a class/type word: a band two line-heights above and below
+    (and four to each side), from
+    unenhanced pixels, scaled so the line is about CLOSEUP_LINE_PX tall (small type at most 2x). On registry artwork this
+    read "KENTUCKY BOUBON WHISKEY" where the full-page pass (and the cloud model) read "BOURBON".
+    Bounded: at most MAX_CLOSEUPS bands, each at most CLOSEUP_MAX_PIXELS after enlarging."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for i, line in enumerate(lines):
+        if len(seen) >= MAX_CLOSEUPS:
+            break
+        keys = [_key(w) for w, _, _ in line]
+        # A class statement is a short line; descriptive paragraphs that mention "bourbon" are skipped.
+        if i in skip or len(keys) > 8 or not set(keys) & CLASS_WORDS or " ".join(keys) in seen:
+            continue
+        seen.add(" ".join(keys))
+        top = min(b[1] for *_, b in line)
+        bottom = max(b[1] + b[3] for *_, b in line)
+        h = max(1, bottom - top)
+        left = min(b[0] for *_, b in line)
+        right = max(b[0] + b[2] for *_, b in line)
+        band = plain[max(0, top - 2 * h):bottom + 2 * h, max(0, left - 4 * h):right + 4 * h]
+        if band.size == 0:
+            continue
+        scale = min(2.0, CLOSEUP_LINE_PX / h, (CLOSEUP_MAX_PIXELS / band.size) ** 0.5)
+        if scale != 1.0:
+            band = cv2.resize(band, None, fx=scale, fy=scale,
+                              interpolation=cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA)
+        try:
+            text = pytesseract.image_to_string(band, config="--oem 1 --psm 6", timeout=timeout)
+        except RuntimeError:  # Tesseract timeout: the close-up is optional
+            break
+        out += [t.strip() for t in text.splitlines() if t.strip()]
+    return out
 
 
 def find_warning(words: list[str]) -> tuple[int, int] | None:
@@ -88,7 +133,7 @@ class LocalOcrExtractor:
         if not tesseract_available():
             raise ProviderUnavailableError("Offline OCR (Tesseract) is not installed on this server.")
         t0 = time.perf_counter()
-        gray, notes = prepare_for_ocr(image)
+        gray, plain, notes = prepare_for_ocr_with_plain(image)
         t1 = time.perf_counter()
         lines, score = _run(gray, psm=3, timeout=self.timeout_s)
         if score < 0.70 and time.perf_counter() - t1 < self.retry_budget_s:
@@ -110,6 +155,9 @@ class LocalOcrExtractor:
             s0 = span[0]
             same_line = [boxes[j] for j in range(s0 + 2, span[1] + 1) if line_of[j] == line_of[s0]]
             ratio = heading_weight_ratio(gray, boxes[s0:s0 + 2], same_line)
+        warning_lines = {line_of[j] for j in range(span[0], span[1] + 1)} if span else set()
+        closeups = closeup_lines(plain, lines, warning_lines, timeout=5)
+        t3 = time.perf_counter()
         return ExtractedLabel(
             provider="local_ocr",
             full_text="\n".join(" ".join(w for w, _, _ in line) for line in lines),
@@ -119,8 +167,9 @@ class LocalOcrExtractor:
             warning_body_bold=None,
             confidence=round(score, 3),
             word_confidences=flat,
-            extraction_ms=int((t2 - t1) * 1000),
+            extraction_ms=int((t3 - t1) * 1000),
             preprocess_ms=int((t1 - t0) * 1000),
             notes=notes,
             warning_weight_ratio=ratio,
+            closeup_lines=closeups,
         )
