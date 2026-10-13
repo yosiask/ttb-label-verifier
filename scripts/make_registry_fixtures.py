@@ -19,9 +19,11 @@ contents field, and its class/type is TTB's code, not the label's wording):
 Ground truth was set by reading every image by hand (zooming into the warning) before any run.
 Three kinds of case:
 
-  as_filed               the record as approved. Most are compliant; five approved labels deviate
-                         from the rules (warning wording, a misspelled class statement) and are
-                         marked as such: TTB approval is not proof of compliance.
+  as_filed               the record as approved. Most are compliant. On five approved labels the
+                         artwork appears to differ from the rules (warning wording, a misspelled
+                         class statement). These are potential findings from reading the public
+                         images, not confirmed by TTB, and need independent confirmation; they are
+                         scored as "must not Pass" (Needs review or Fail).
   front_only             only the front image, "every side" not ticked: a warning on the back
                          cannot be seen, so the right answer is Needs review, never Fail.
   altered_application    the same untouched images, with one application field deliberately

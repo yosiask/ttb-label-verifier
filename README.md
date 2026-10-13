@@ -124,6 +124,45 @@ Key thresholds (all in `app/core/config.py`):
 - bold: heading/body stroke ratio of 1.4 or more confirms bold, 1.15 or less means the same weight;
 - unreadable below 55% reader confidence.
 
+## Regulatory coverage
+
+The prototype compares a label with its application and checks the health warning. It does not decide whether a label meets every labeling regulation. "Checked" means the comparison below; "not checked" items still need a specialist.
+
+| Area | Checked by the prototype | Not checked |
+|---|---|---|
+| Brand name (all) | Matches the application (capitalization and punctuation ignored; spelling differences go to review) | Whether the name is misleading; placement on the brand label |
+| Class/type (all) | Matches the application's class/type wording; a close-up re-read guards against misspellings being "corrected" | Whether the designation meets its standard of identity (e.g. what qualifies as "straight bourbon"); TTB's class/type code |
+| Alcohol content (all) | Numeric match with the application; proof equals 2 × ABV; several strengths on one label go to review | Legal tolerances, mandatory vs optional statements (wine at 14% or less, malt beverages), required wording and format |
+| Net contents (all) | Numeric match in metric or U.S. units, within 0.5% | Authorized standards of fill; which unit system is required for the product |
+| Name and address (all) | Matches the application; "Bottled by", "Imported by" and similar phrases allowed | Whether the phrase fits the operation performed; importer statement rules |
+| Country of origin (imports) | Present and matching; foreign-language statements go to review | Customs marking rules beyond the statement itself |
+| Health warning (all; 27 CFR part 16) | Exact wording; "GOVERNMENT WARNING:" in capitals with the colon; heading bold and body not bold (reviewed by a person unless confirmed) | Minimum type size, characters per inch, contrasting background, "separate and apart" placement |
+| Distilled spirits (27 CFR part 5) | The fields above | Age statements, state of distillation, commodity statements ("distilled from grain"), coloring and flavoring disclosures, neutral-spirits percentages, same-field-of-vision rules |
+| Wine (27 CFR part 4) | The fields above | Appellation of origin, varietal and vintage-date rules, estate bottled, the sulfite declaration, alcohol tolerances, semi-generic names |
+| Malt beverages (27 CFR part 7) | The fields above, including pints and gallons | Alcohol-content rules specific to malt beverages, "low/non-alcoholic" terms, flavor-derived alcohol, products under FDA rather than TTB labeling rules |
+| All products | | Other mandatory disclosures (e.g. FD&C Yellow No. 5, cochineal/carmine, aspartame), claims and statements (health, organic), formula approval, label size and legibility, state requirements |
+
+## Future COLAs Online Integration — Not Implemented
+
+This section is a proposal only: there is no connector, no queue and no storage in this prototype.
+
+```mermaid
+flowchart LR
+    A[Applicant submits or<br/>resubmits in COLAs Online] --> Q[TTB review queue<br/>existing assignment workflow]
+    A -- submission event<br/>application ID + version --> V[AI verification service<br/>asynchronous, read-only]
+    S[Authorized scheduled retrieval<br/>fallback if no events] -.-> V
+    V --> F[(Findings store<br/>TTB-controlled)]
+    F --> P[Assigned specialist's view<br/>beside the application]
+    Q --> P
+    P --> D[Specialist decides<br/>approve / return / reject]
+```
+
+- **Runs beside the existing queue.** A submission event (preferred) or an authorized scheduled retrieval (fallback) starts verification asynchronously. The queue, the assignment rules and the specialist's decision authority do not change; the AI never approves or rejects.
+- **Exact version tracking.** Every result is keyed by the application ID and the exact submission version (resubmissions and corrections included), so a finding never appears against artwork it was not run on.
+- **Three separate statuses.** TTB application status (owned by COLAs Online), AI processing status (queued, running, done, failed; "failed" means the specialist reviews as today), and the AI assessment (Pass / Needs review / Fail per field, with reasons).
+- **Findings stored automatically** in a future TTB-controlled system, visible to the assigned specialist in their view of the application, and kept under TTB's records rules.
+- **Deployment.** Proposed: an agency-approved government cloud (e.g. Azure Government) with private connectivity to COLAs Online and no public endpoint, subject to service availability in that cloud (including the vision model) and to security authorization. The offline engine covers any part of the workflow where cloud AI is not approved.
+
 ## Design decisions and trade-offs
 
 - **AI reads, rules decide.** A vision model is far better than OCR on curved, glossy, decorative labels, but it can be confidently wrong and it knows what a warning "should" say. So it only transcribes, blind to the application, and deterministic, tested rules make every decision.
@@ -165,7 +204,7 @@ The app keeps nothing after a request: no database, no files, and label content 
 - **Bold on small print in photos is often Needs review.** At about 13 px text height, regular and bold condensed type measure nearly the same. Our synthetic renders confirm bold reliably (bold headings measure about 1.7×); approved registry artwork did not (bold headings measured 0.96–1.36×), so authentic labels are usually Needs review for bold.
 - **Needs review rate on photos is high** (about half of the simulated photos with the cloud engine). That's the cost of the bold and two-reader safeguards. On flat synthetic labels it is within the 20% gate.
 - **Offline OCR on photos** misreads small and curved print. Low-confidence readings are Needs review rather than Fail, but a word lost under glare can still cause a Fail.
-- **Not checked:** warning type size, legibility and contrast, placement ("separate and apart", same field of vision), and mandatory statements not in the form (e.g. sulfites, color additives, age statements). Wine and beer rules beyond these fields are not covered.
+- **Not checked:** see [Regulatory coverage](#regulatory-coverage) for what the prototype does and does not check for spirits, wine and malt beverages.
 - **Not attempted:** perspective correction of strongly angled photos, and live video scanning.
 
 ## Run locally

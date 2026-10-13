@@ -156,6 +156,7 @@ def match_text_field(
     review_at: float,
     kind: str,
     t: Thresholds = THRESHOLDS,
+    alternatives: list[str] | None = None,
 ) -> TextMatch:
     name = FIELD_LABELS[field]
     expected = normalize(expected_raw)
@@ -207,6 +208,12 @@ def match_text_field(
             status = Status.NEEDS_REVIEW
             reason = (f"The producer's name is on the label (\"{named}\"), but its address was not read. "
                       "Check the address by eye.")
+        elif (alt := next((a for a in alternatives or [] if _score(kind, expected, normalize(a)).exact), None)):
+            # Another image of the label read a matching value (registry: the French front panel's
+            # appellation was taken as the class/type; the import strip reads "RED WINE").
+            status = Status.NEEDS_REVIEW
+            reason = (f"One image reads the {name} as \"{found}\", another as \"{clean(alt)}\", which matches the "
+                      "application. Check by eye which is the statement for this field.")
         else:
             status, reason = Status.FAIL, f"The label's {name} reads \"{found}\", which does not match the application."
             if not (best and best[0].score >= review_at):

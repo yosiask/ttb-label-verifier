@@ -49,12 +49,15 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
 
     matches = {
         "brand_name": match_text_field("brand_name", application.brand_name, label, f.get("brand_name"),
-                                       low_conf, t.brand_pass, t.brand_review, "partial", t),
+                                       low_conf, t.brand_pass, t.brand_review, "partial", t,
+                                       alternatives=extracted.field_alternatives.get("brand_name", [])),
         "class_type": match_text_field("class_type", application.class_type, label, f.get("class_type"),
-                                       low_conf, t.class_type_pass, t.class_type_review, "token", t),
+                                       low_conf, t.class_type_pass, t.class_type_review, "token", t,
+                                       alternatives=extracted.field_alternatives.get("class_type", [])),
         "producer_name_address": match_text_field(
             "producer_name_address", application.producer_name_address, label,
-            f.get("producer_name_address"), low_conf, t.producer_pass, t.producer_review, "token", t),
+            f.get("producer_name_address"), low_conf, t.producer_pass, t.producer_review, "token", t,
+            alternatives=extracted.field_alternatives.get("producer_name_address", [])),
     }
     resolve_shared_lines(matches)
     _closeup_class_check(matches["class_type"].check, application.class_type, extracted)
@@ -172,10 +175,13 @@ def merge_readings(readings: list[ExtractedLabel]) -> ExtractedLabel:
     w = max(range(len(readings)), key=lambda i: len(readings[i].warning_text or ""))
     panel = readings[w]
     fields: dict[str, str | None] = {}
+    alternatives: dict[str, list[str]] = {}
     for r in readings:
         for k, v in r.fields.items():
             if fields.get(k) is None:
                 fields[k] = v
+            elif v is not None and v != fields[k] and v not in alternatives.get(k, []):
+                alternatives.setdefault(k, []).append(v)
     cross = [r.cross_check for r in readings]
     merged_cross = None
     if panel.cross_check is not None:
@@ -197,6 +203,7 @@ def merge_readings(readings: list[ExtractedLabel]) -> ExtractedLabel:
         provider=providers.pop() if len(providers) == 1 else panel.provider,
         full_text="\n".join(r.full_text for r in readings),
         fields=fields,
+        field_alternatives=alternatives,
         warning_text=panel.warning_text,
         warning_heading_bold=panel.warning_heading_bold,
         warning_body_bold=panel.warning_body_bold,

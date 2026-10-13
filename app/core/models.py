@@ -48,6 +48,8 @@ class ExtractedLabel(BaseModel):
     provider: Literal["local_ocr", "azure_vision"]
     full_text: str  # all text read, reading order, one physical line per "\n"
     fields: dict[str, str | None] = {}  # provider's best guess per field (OCR leaves these empty)
+    # Several images: what the other panels read for a field, when it differs from `fields` (merge only).
+    field_alternatives: dict[str, list[str]] = {}
     warning_text: str | None
     warning_heading_bold: bool | None  # None = could not determine
     warning_body_bold: bool | None
