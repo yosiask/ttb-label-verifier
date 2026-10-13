@@ -73,7 +73,7 @@ button.secondary { padding: 0.55rem 1rem; background: #fff; color: #1a5fb4; bord
 table.checks { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 .checks th, .checks td { text-align: left; vertical-align: top; padding: 0.65rem 0.6rem; border-bottom: 1px solid var(--line); }
 .checks th { font-size: 0.9rem; color: var(--muted); }
-.checks td.found, .checks td.expected { word-break: break-word; max-width: 18rem; }
+.checks td.found, .checks td.expected { overflow-wrap: break-word; min-width: 9rem; max-width: 18rem; }
 .pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.6rem; border-radius: 999px; border: 2px solid; font-weight: 700; white-space: nowrap; }
 details.diff { margin-top: 0.5rem; }
 details.diff summary { cursor: pointer; color: #1a5fb4; font-weight: 600; }

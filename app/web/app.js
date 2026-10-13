@@ -278,6 +278,14 @@ function renderDiff(diff) {
   return box;
 }
 
+// The warning is long: show its start here; the full text is in the word diff under "Why".
+function labelSays(c) {
+  if (c.found === null || c.found === undefined) return "Not found";
+  if (c.field !== "government_warning") return c.found;
+  const words = c.found.split(/\s+/);
+  return words.length > 6 ? `${words.slice(0, 6).join(" ")} … (full text under “Show warning details”)` : c.found;
+}
+
 function renderResult(root, r, roundTripSeconds) {
   const s = STATUS[r.overall];
   const banner = root.querySelector(".banner");
@@ -310,6 +318,8 @@ function renderResult(root, r, roundTripSeconds) {
       if (c.details.diff && c.details.diff.length) {
         det.append(el("p", { class: "diff-legend" }, legend));
         det.append(renderDiff(c.details.diff));
+      } else if (c.found) {
+        det.append(el("p", { class: "diff-legend" }, "Warning text read from the label:"), el("div", { class: "diff-text" }, c.found));
       }
       const xc = c.details.cross_check;
       if (c.details.readers_disagree && xc) {
@@ -328,7 +338,7 @@ function renderResult(root, r, roundTripSeconds) {
       el("td", { "data-label": "Result" }, pill(c.status)),
       el("th", { scope: "row" }, FIELD_LABELS[c.field] || c.field),
       el("td", { class: "expected", "data-label": "Application says" }, c.field === "government_warning" ? "Exact text required by 27 CFR 16.21" : (c.expected ?? "—")),
-      el("td", { class: "found", "data-label": "Label says" }, c.found ?? "Not found"),
+      el("td", { class: "found", "data-label": "Label says" }, labelSays(c)),
       why,
     ));
   }
