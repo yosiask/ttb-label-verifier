@@ -1,0 +1,56 @@
+{
+  "case": "holy_city_wrong_abv",
+  "kind": "altered_application",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Untouched registry images; application alcohol_content set to '45% Alc./Vol. (90 Proof)' (label says 40% / 80 proof).",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26229001000351",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26229001000351",
+    "class_code": "301 VODKA 80-89 PROOF",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26229001000351_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "HOLY CITY",
+    "class_type": "Vodka",
+    "alcohol_content": "45% Alc./Vol. (90 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Holy City Brewing, North Charleston, S.C.",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "alcohol_content": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "alcohol_content": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

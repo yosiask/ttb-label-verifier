@@ -1,0 +1,48 @@
+{
+  "case": "pegau_white_wine_front_only",
+  "kind": "front_only",
+  "authentic": true,
+  "truth": "review",
+  "description": "Front image only, 'every side' not ticked: the warning is on the back image, which was not supplied.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "15065001000389",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=15065001000389",
+    "class_code": "81 TABLE WHITE WINE",
+    "registry_images": [
+      2
+    ]
+  },
+  "images": [
+    "images/15065001000389_2"
+  ],
+  "all_sides": false,
+  "application": {
+    "brand_name": "DOMAINE DU PEGAU",
+    "class_type": "White Wine",
+    "alcohol_content": "14% Alc/Vol",
+    "net_contents": "750 mL",
+    "producer_name_address": "T. Elenteny Imports, New York, NY",
+    "country_of_origin": "France",
+    "is_import": true,
+    "beverage_type": "wine"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": "needs_review"
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": "needs_review"
+      }
+    }
+  }
+}

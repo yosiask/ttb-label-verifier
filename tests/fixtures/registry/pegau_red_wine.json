@@ -1,0 +1,52 @@
+{
+  "case": "pegau_red_wine",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Five registry images; the neck label (image 3, vintage only) is left out to stay within 4 per check.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "10334001000372",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=10334001000372",
+    "class_code": "88 DESSERT /PORT/SHERRY/(COOKING) WINE",
+    "registry_images": [
+      1,
+      2,
+      4,
+      5
+    ]
+  },
+  "images": [
+    "images/10334001000372_1",
+    "images/10334001000372_2",
+    "images/10334001000372_4",
+    "images/10334001000372_5"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "DOMAINE DU PEGAU",
+    "class_type": "Red Wine",
+    "alcohol_content": "16% Alc. by Vol.",
+    "net_contents": "750 mL",
+    "producer_name_address": "T Elenteny Imports, New York, NY",
+    "country_of_origin": "France",
+    "is_import": true,
+    "beverage_type": "wine"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

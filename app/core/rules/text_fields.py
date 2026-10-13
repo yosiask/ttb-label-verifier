@@ -36,7 +36,13 @@ _COUNTRY_ALIASES = {
     "united states of america": "united states", "america": "united states",
     "uk": "united kingdom", "great britain": "united kingdom", "britain": "united kingdom",
     "holland": "netherlands", "the netherlands": "netherlands",
+    "korea": "south korea", "republic of korea": "south korea",
 }
+# A country statement in another language ("Hecho en Mexico", "Produit de France"): not compared by
+# translation; the reviewer reads it.
+_FOREIGN_COUNTRY = re.compile(
+    r"\b(?:hecho en|producto de|elaborado en|produit de|produit en|fabrique en|prodotto in|"
+    r"prodotto da|hergestellt in|erzeugnis aus|produto de)\b")
 
 
 @dataclass
@@ -185,8 +191,14 @@ def match_text_field(
             found = best[1].text
         elif best and best[0].exact:
             status, reason = Status.NEEDS_REVIEW, f"The label's {name} reads \"{found}\", but the application value also appears elsewhere on the label. Compare by eye."
+        elif (named := _producer_name_only(field, expected_raw, label)) is not None:
+            status = Status.NEEDS_REVIEW
+            reason = (f"The producer's name is on the label (\"{named}\"), but its address was not read. "
+                      "Check the address by eye.")
         else:
             status, reason = Status.FAIL, f"The label's {name} reads \"{found}\", which does not match the application."
+            if not (best and best[0].score >= review_at):
+                details["absent"] = True  # nothing like the application value on these images
         return TextMatch(FieldCheck(field=field, status=status, expected=expected_raw, found=found,
                                     rule=rule, reason=reason, details=details), None, 1.0)
 
@@ -209,6 +221,10 @@ def match_text_field(
     elif low_confidence:
         status = Status.NEEDS_REVIEW
         reason = f"The {name} could not be confirmed; the image is hard to read. Request a better image."
+    elif (named := _producer_name_only(field, expected_raw, label)) is not None:
+        status = Status.NEEDS_REVIEW
+        reason = (f"The producer's name is on the label (\"{named}\"), but its address was not found. "
+                  "It may be printed elsewhere or too small to read; check by eye.")
     else:
         status = Status.FAIL
         reason = f"The application's {name} was not found on the label (closest text: \"{span.text}\")."
@@ -216,6 +232,20 @@ def match_text_field(
     found = span.text if (sc.score >= review_at or status == Status.FAIL) else None
     return TextMatch(FieldCheck(field=field, status=status, expected=expected_raw, found=found,
                                 rule=rule, reason=reason, details=details), span, sc.coverage)
+
+
+def _producer_name_only(field: str, expected_raw: str, label: LabelText) -> str | None:
+    """The producer's name (before the first comma) on the label word for word, its address not read.
+    Addresses are often printed apart from the name, sideways or in very small type."""
+    if field != "producer_name_address" or "," not in expected_raw:
+        return None
+    name = normalize(expected_raw.split(",", 1)[0]).split()
+    if not name or len("".join(name)) < 4:
+        return None
+    for span in label.spans:
+        if _contains_run(name, span.norm.split()):
+            return span.text
+    return None
 
 
 def _pass_reason(expected: str, found: str, name: str) -> str:
@@ -244,6 +274,22 @@ def _canon_country(text: str) -> str:
     return _COUNTRY_ALIASES.get(n, n)
 
 
+def _country_unclear(norm: str, expected: str) -> str | None:
+    """Why a reading that does not name a different country in an English statement is not a Fail."""
+    if _FOREIGN_COUNTRY.search(norm):
+        return (f"The country of origin is stated in another language (\"{norm}\"). "
+                "Check by eye that it names the country in the application.")
+    m = _COUNTRY_PREFIX.search(norm)
+    if m and len(m.group(1).split()) <= 4:
+        return None  # "Product of X": a clear statement naming another country
+    if f" {expected} " in f" {norm} ":
+        return "The country is named on the label but not in a usual country of origin statement. Check by eye."
+    if len(norm.split()) > 4:
+        return ("The reader did not return a country of origin statement (it returned other text). "
+                "Check the label by eye.")
+    return None
+
+
 def check_country(
     expected_raw: str | None,
     is_import: bool,
@@ -266,12 +312,16 @@ def check_country(
                           rule=rule, reason=reason)
 
     if extracted_value is not None:
-        named = _canon_country(_COUNTRY_PREFIX.sub(r"\1", normalize(extracted_value)))
+        norm = normalize(extracted_value)
+        named = _canon_country(_COUNTRY_PREFIX.sub(r"\1", norm))
         if named == expected:
             return fc(Status.PASS, clean(extracted_value), "Country of origin matches the application.")
         if fuzz.ratio(expected, named) >= t.country_review:
             return fc(Status.NEEDS_REVIEW, clean(extracted_value),
                       "Country of origin is spelled differently from the application. Compare by eye.")
+        unclear = _country_unclear(norm, expected)
+        if unclear:
+            return fc(Status.NEEDS_REVIEW, clean(extracted_value), unclear)
         return fc(Status.FAIL, clean(extracted_value),
                   f"The label gives the country of origin as \"{clean(extracted_value)}\", not \"{expected_raw}\".")
 
@@ -292,6 +342,9 @@ def check_country(
         if fuzz.ratio(expected, _canon_country(country)) >= t.country_review:
             return fc(Status.NEEDS_REVIEW, text,
                       "Country of origin is spelled differently from the application. Compare by eye.")
+    for span in label.spans:
+        if len(span.lines) == 1 and _FOREIGN_COUNTRY.search(span.norm):
+            return fc(Status.NEEDS_REVIEW, span.text, _country_unclear(span.norm, expected))
     if statements:
         text, _ = statements[0]
         return fc(Status.FAIL, text, f"The label's country of origin (\"{text}\") does not match \"{expected_raw}\".")

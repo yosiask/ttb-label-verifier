@@ -1,0 +1,58 @@
+{
+  "case": "woodson_whiskey",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Approved front label reads 'KENTUCKY BOUBON WHISKEY' (misspelled class statement); ABV line is ~8 px.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26218001000660",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26218001000660",
+    "class_code": "641 WHISKY SPECIALTIES",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26218001000660_1",
+    "images/26218001000660_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "WOODSON",
+    "class_type": "Kentucky Bourbon Whiskey Finished with Port Staves",
+    "alcohol_content": "57% Alc/Vol (114 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Kettner Distillery LLC, San Diego, CA",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "class_type": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "class_type": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "case": "granny_gs_wine",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Light text on black; bottler line misspelled 'PRODUCDED AND BOTTLED BY' (not a mandatory phrase).",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "25150001000167",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=25150001000167",
+    "class_code": "82 TABLE FLAVORED WINE",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/25150001000167_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "GRANNY G'S WINE CO.",
+    "class_type": "Elderberry, Apple, Grape, Pear Wine with Natural Flavors",
+    "alcohol_content": "10.5% Alcohol by Volume",
+    "net_contents": "500 mL",
+    "producer_name_address": "Granny G's Wine Co., Conroe, TX",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "wine"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

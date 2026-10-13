@@ -1,0 +1,46 @@
+{
+  "case": "carbliss_cocktail",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Brand only in a script logo; warning sideways.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26056001000136",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26056001000136",
+    "class_code": "643 VODKA SPECIALTIES",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26056001000136_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "CARBLISS",
+    "class_type": "Vodka Cocktail",
+    "alcohol_content": "5% Alc/Vol",
+    "net_contents": "12 fl oz",
+    "producer_name_address": "SNFood & Beverage LLC, Verona, WI",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

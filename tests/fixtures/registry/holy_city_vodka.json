@@ -1,0 +1,46 @@
+{
+  "case": "holy_city_vodka",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Clean flat artwork.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26229001000351",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26229001000351",
+    "class_code": "301 VODKA 80-89 PROOF",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26229001000351_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "HOLY CITY",
+    "class_type": "Vodka",
+    "alcohol_content": "40% Alc./Vol. (80 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Holy City Brewing, North Charleston, S.C.",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "case": "siboney_wrong_country",
+  "kind": "altered_application",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Untouched registry images; application country_of_origin set to 'Mexico' (label says Dominican Republic).",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26208001000603",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26208001000603",
+    "class_code": "497 DILUTED RUM GOLD FB",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26208001000603_1",
+    "images/26208001000603_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "SIBONEY",
+    "class_type": "Diluted Rum",
+    "alcohol_content": "34% Alc/Vol",
+    "net_contents": "700 mL",
+    "producer_name_address": "Vinaio Imports, Bronx, NY",
+    "country_of_origin": "Mexico",
+    "is_import": true,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "country_of_origin": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "country_of_origin": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

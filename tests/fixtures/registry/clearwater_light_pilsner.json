@@ -1,0 +1,56 @@
+{
+  "case": "clearwater_light_pilsner",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Approved can: sideways ~6 px warning reads 'durring', 'risks', and omits 'drive a car or'.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26205001000196",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26205001000196",
+    "class_code": "901 BEER",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26205001000196_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "CLEARWATER LIGHT",
+    "class_type": "Pilsner",
+    "alcohol_content": "4.2% Alc/Vol",
+    "net_contents": "16 fl oz",
+    "producer_name_address": "Clearwater Brewing Company, Clearwater, FL",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "beer"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

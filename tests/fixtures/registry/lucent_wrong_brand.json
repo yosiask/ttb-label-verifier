@@ -1,0 +1,58 @@
+{
+  "case": "lucent_wrong_brand",
+  "kind": "altered_application",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Untouched registry images; application brand_name set to 'LUMINA' (label says LUCENT).",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26222001000393",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26222001000393",
+    "class_code": "643 VODKA SPECIALTIES",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26222001000393_1",
+    "images/26222001000393_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "LUMINA",
+    "class_type": "Vodka with Natural Flavors",
+    "alcohol_content": "30% Alcohol per Volume (60 Proof)",
+    "net_contents": "1 Liter",
+    "producer_name_address": "Sazerac Co., Louisville, KY",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "brand_name": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "brand_name": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

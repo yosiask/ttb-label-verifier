@@ -41,3 +41,19 @@ def test_unreadable_unit_fragment_is_review_not_fail(line):
 def test_no_volume_at_all_still_fails():
     r = check_net_contents("750 mL", "OLD TOM DISTILLERY\nBourbon Whiskey\nBardstown, Kentucky", False)
     assert r.status.value == "fail"
+
+
+@pytest.mark.parametrize("text,ml", [
+    ("1 PINT ALE", 473.176),
+    ("Net Contents: 5.16 U.S. Gallons", 5.16 * 3785.41),
+    ("15.5 GALLONS", 15.5 * 3785.41),
+    ("1 qt", 946.353),
+])
+def test_us_units_parsed(text, ml):
+    # Malt beverages state net contents in U.S. units (27 CFR 7.70); seen on registry beer labels.
+    assert parse_volumes(text)[0][0] == pytest.approx(ml, rel=1e-4)
+
+
+def test_pint_label_matches_ounce_application():
+    assert check_net_contents("16 fl oz", "1 PINT ALE", False).status == Status.PASS
+    assert check_net_contents("12 fl oz", "1 PINT ALE", False).status == Status.FAIL

@@ -7,3 +7,6 @@ __pycache__/
 build/
 dist/
 HANDOFF.md
+
+# Third-party label artwork from the TTB Public COLA Registry: fetched, not committed
+tests/fixtures/registry/images/

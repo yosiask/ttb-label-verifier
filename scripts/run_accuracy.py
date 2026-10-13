@@ -32,7 +32,8 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-SETS = {"clean": ROOT / "tests" / "fixtures", "photos": ROOT / "tests" / "fixtures" / "photos"}
+SETS = {"clean": ROOT / "tests" / "fixtures", "photos": ROOT / "tests" / "fixtures" / "photos",
+        "registry": ROOT / "tests" / "fixtures" / "registry"}
 PRICE_IN, PRICE_OUT = 0.44, 1.76  # USD per million tokens, gpt-4.1-mini regional Standard (eastus2 list price)
 
 
@@ -47,13 +48,26 @@ def truth_of(meta: dict) -> str:
     return "review"
 
 
+def image_path(folder: Path, name: str) -> Path | None:
+    """Registry fixtures name images without extension (it comes from TTB's server)."""
+    p = folder / name
+    if p.exists():
+        return p
+    found = sorted(p.parent.glob(p.name + ".*")) if p.parent.exists() else []
+    return found[0] if found else None
+
+
 def load(sets: list[str], only: list[str] | None) -> list[tuple[str, str, dict, Path]]:
     out = []
     for s in sets:
         for p in sorted(SETS[s].glob("*.json")):
             meta = json.loads(p.read_text())
-            if not only or meta["case"] in only:
-                out.append((s, meta["case"], meta, SETS[s]))
+            if only and meta["case"] not in only:
+                continue
+            if any(image_path(SETS[s], n) is None for n in meta.get("images") or [meta["image"]]):
+                print(f"skip {s}/{meta['case']}: image missing (registry: run scripts/fetch_registry_images.py)")
+                continue
+            out.append((s, meta["case"], meta, SETS[s]))
     return out
 
 
@@ -64,8 +78,8 @@ def pct(xs: list[float], p: float) -> float:
 
 def run_one(client: httpx.Client, base: str, meta: dict, folder: Path, provider: str) -> dict:
     images = meta.get("images") or [meta["image"]]
-    files = [("image", (n, (folder / n).read_bytes(), "image/jpeg" if n.endswith(".jpg") else "image/png"))
-             for n in images]
+    paths = [image_path(folder, n) for n in images]
+    files = [("image", (p.name, p.read_bytes(), "image/png" if p.suffix == ".png" else "image/jpeg")) for p in paths]
     data = {"application": json.dumps(meta["application"]), "provider": provider,
             "all_sides": "true" if meta.get("all_sides", False) else "false"}
     started = time.perf_counter()
@@ -134,9 +148,10 @@ def report(results: dict, args, started: str) -> str:
         f"real HTTP API, {args.reps} repetition(s) per engine. Round trips include the internet path from the test "
         "machine (a VPS outside Azure) to the app.",
         "",
-        "Fixtures are synthetic: `clean` are flat rendered labels; `photos` are simulated photographs (curvature, "
-        "angle, glare, blur, small text, unusual fonts, front/back labels). They are not real photos of real "
-        "products. Ground truth is hand-written in the generators.",
+        "Sets: `clean` are synthetic flat rendered labels; `photos` are simulated photographs (curvature, angle, "
+        "glare, blur, small text, unusual fonts, front/back labels), not real photos of real products; `registry` is "
+        "**authentic** TTB-approved label artwork from the Public COLA Registry (scripts/make_registry_fixtures.py "
+        "explains the cases). Ground truth is hand-written in the generators, never taken from the app.",
         "",
         "| Engine | Set | Labels | As expected | False pass | False fail | Detection (Fail) | Flagged (not Pass) "
         "| Needs review | p50 / p95 round trip | Server p50 / p95 |",

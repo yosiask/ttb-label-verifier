@@ -1,0 +1,48 @@
+{
+  "case": "siboney_rum_import",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Import; condensed type on a striped dark background.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26208001000603",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26208001000603",
+    "class_code": "497 DILUTED RUM GOLD FB",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26208001000603_1",
+    "images/26208001000603_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "SIBONEY",
+    "class_type": "Diluted Rum",
+    "alcohol_content": "34% Alc/Vol",
+    "net_contents": "700 mL",
+    "producer_name_address": "Vinaio Imports, Bronx, NY",
+    "country_of_origin": "Dominican Republic",
+    "is_import": true,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

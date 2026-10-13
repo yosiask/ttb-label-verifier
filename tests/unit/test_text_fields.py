@@ -174,3 +174,38 @@ def test_brewed_and_canned_by_prefix_is_not_extra_wording():
                          LabelText.from_full_text("IRON GATE\n" + v), v, False, T.producer_pass, T.producer_review,
                          "token", T)
     assert r.check.status == Status.PASS
+
+
+# --- Country statements seen on authentic registry labels
+
+
+@pytest.mark.parametrize("read,expected,status", [
+    ("PRODUCT OF KOREA", "South Korea", Status.PASS),
+    ("SAKE OF JAPAN", "Japan", Status.NEEDS_REVIEW),
+    ("HECHO EN REPÚBLICA DOMINICANA", "Dominican Republic", Status.NEEDS_REVIEW),
+    ("Double distilled in a traditional Charentais pot still and matured for 30 years", "Italy", Status.NEEDS_REVIEW),
+    ("Product of France", "Italy", Status.FAIL),
+    ("Mexico", "Italy", Status.FAIL),
+])
+def test_country_reading_from_vision(read, expected, status):
+    assert check_country(expected, True, LabelText.from_full_text(read), read, False).status == status
+
+
+def test_country_foreign_statement_in_text_is_review():
+    c = check_country("Dominican Republic", True, LabelText.from_full_text("HECHO EN\nREPUBLICA DOMINICANA"), None, False)
+    assert c.status == Status.NEEDS_REVIEW
+
+
+def test_producer_name_found_address_unread_is_review():
+    # Mount Holly (registry): name in the logo, "BREWED BY MOUNT HOLLY BEER BEACON, NY" printed sideways.
+    m = match_text_field("producer_name_address", "Mount Holly Beer, Beacon, NY",
+                         LabelText.from_full_text("FROSTY GOLD\nMOUNT HOLLY BEER CO."), None, False,
+                         T.producer_pass, T.producer_review, "token")
+    assert m.check.status == Status.NEEDS_REVIEW and "address" in m.check.reason
+
+
+def test_producer_other_name_still_fails():
+    m = match_text_field("producer_name_address", "Mount Holly Beer, Beacon, NY",
+                         LabelText.from_full_text("FROSTY GOLD\nBREWED BY HUDSON ALE WORKS, BEACON, NY"), None, False,
+                         T.producer_pass, T.producer_review, "token")
+    assert m.check.status == Status.FAIL

@@ -1,0 +1,48 @@
+{
+  "case": "lucent_citron_front_only",
+  "kind": "front_only",
+  "authentic": true,
+  "truth": "review",
+  "description": "Front image only, 'every side' not ticked: the warning is on the back image, which was not supplied.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26222001000393",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26222001000393",
+    "class_code": "643 VODKA SPECIALTIES",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26222001000393_1"
+  ],
+  "all_sides": false,
+  "application": {
+    "brand_name": "LUCENT",
+    "class_type": "Vodka with Natural Flavors",
+    "alcohol_content": "30% Alcohol per Volume (60 Proof)",
+    "net_contents": "1 Liter",
+    "producer_name_address": "Sazerac Co., Louisville, KY",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": "needs_review"
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": "needs_review"
+      }
+    }
+  }
+}

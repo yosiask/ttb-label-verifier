@@ -1,0 +1,56 @@
+{
+  "case": "daily_brewing_lager",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "review",
+  "description": "Warning omits the comma in 'machinery, and': punctuation only, a reviewer's call. Label says 'Product of Korea'.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26219001000007",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26219001000007",
+    "class_code": "956 MALT BEVERAGES SPECIALITIES",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26219001000007_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "DAILY BREWING",
+    "class_type": "Ginseng Lager",
+    "alcohol_content": "4.5% Alc/Vol",
+    "net_contents": "5.28 U.S. Gallons (20 L)",
+    "producer_name_address": "QQD Corporation, Brea, CA",
+    "country_of_origin": "South Korea",
+    "is_import": true,
+    "beverage_type": "beer"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

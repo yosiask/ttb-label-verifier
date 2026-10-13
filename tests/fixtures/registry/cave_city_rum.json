@@ -1,0 +1,58 @@
+{
+  "case": "cave_city_rum",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Approved label reads 'impairs YOVUR ability' (one-letter typo): a reader that autocorrects would pass it.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26232001000220",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26232001000220",
+    "class_code": "410 U.S. RUM (GOLD)",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26232001000220_1",
+    "images/26232001000220_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "CAVE CITY DISTILLING CO. RUM",
+    "class_type": "Rum",
+    "alcohol_content": "46.5% Alc. By Vol. (93 Proof)",
+    "net_contents": "750 mL",
+    "producer_name_address": "Cave City Distilling Co., Smiths Grove, KY",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}

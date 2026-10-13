@@ -19,6 +19,8 @@ _ALC_BEFORE = re.compile(r"\b(?:alc(?:ohol)?|abv)\b\.?\s*(?:/\s*vol\.?)?\s*[:\-]
 _ALC_AFTER = re.compile(_NUM + r"\s*(?:alc\b|abv\b|by\s+vol)", re.IGNORECASE)
 _PROOF = re.compile(_NUM + r"\s*°?\s*proof\b", re.IGNORECASE)
 _KEYWORD = re.compile(r"%|\balc\b|\balcohol\b|\bvol\b|\babv\b|\bproof\b", re.IGNORECASE)
+# An ABV stated as such ("6.5% Alc./Vol.", "ABV 4.2"), not any percentage ("100% de agave").
+_EXPLICIT = (re.compile(_NUM + r"\s*%?\s*(?:alc\b|alcohol\b|abv\b|by\s+vol)", re.IGNORECASE), _ALC_BEFORE)
 
 RULE = "numeric ABV match; proof must equal 2 x ABV"
 
@@ -55,6 +57,15 @@ def parse_alcohol(text: str) -> AlcoholReading:
                 if line not in r.snippets:
                     r.snippets.append(line)
     return r
+
+
+def _explicit_abvs(text: str) -> list[float]:
+    out = []
+    for line in text.splitlines():
+        line = clean(line)
+        for rx in _EXPLICIT:
+            out += [v for v in (_num(m.group(1)) for m in rx.finditer(line)) if 0 < v <= 100]
+    return out
 
 
 def _fmt(v: float) -> str:
@@ -106,6 +117,16 @@ def check_alcohol(
         shown = f"{_fmt(lab.abv[0])}%" if lab.abv else f"{_fmt(lab.proof[0])} proof"
         return fc(Status.FAIL, found,
                   f"The label shows {shown}; the application says {_fmt(exp_abv)}%.", **details)
+
+    # A label stating several different strengths (a keg collar shared by products, with tick boxes)
+    # matches whichever one the application names: which applies cannot be told from the text.
+    stated = _explicit_abvs((extracted_value or "") + "\n" + (label_text or ""))
+    others = sorted({v for v in stated if abs(v - exp_abv) > t.abv_tolerance})
+    if others:
+        return fc(Status.NEEDS_REVIEW, found,
+                  f"The label states more than one alcohol content ({_fmt(exp_abv)}% and "
+                  f"{', '.join(_fmt(v) + '%' for v in others)}). Check by eye which one applies to this product.",
+                  **details, other_abvs=others)
 
     if exp.proof and lab.proof and not any(abs(p - exp.proof[0]) <= t.proof_tolerance for p in lab.proof):
         return fc(Status.FAIL, found,

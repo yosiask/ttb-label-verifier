@@ -8,15 +8,17 @@ from ..config import THRESHOLDS, Thresholds
 from ..models import FieldCheck, Status
 from ..normalize import clean
 
-ML_PER_UNIT = {"ml": 1.0, "cl": 10.0, "l": 1000.0, "floz": 29.5735}
+# U.S. units: malt beverages must state net contents in fluid ounces, pints, quarts or gallons (27 CFR 7.70).
+ML_PER_UNIT = {"ml": 1.0, "cl": 10.0, "l": 1000.0, "floz": 29.5735, "pt": 473.176, "qt": 946.353, "gal": 3785.41}
 
 _VOLUME = re.compile(
     r"(?<![\w.,])(\d+(?:[.,]\d+)*)\s*"
     r"(ml|milli-?lit(?:er|re)s?|cl|centi-?lit(?:er|re)s?|lit(?:er|re)s?|l|"
-    r"(?:us\s+)?fl\.?\s*oz\.?|fluid\s+ounces?)(?![a-z])",
+    r"(?:u\.?s\.?\s+)?(?:fl\.?\s*oz\.?|fluid\s+ounces?|pints?|pts?\.?|quarts?|qts?\.?|gallons?|gal\.?))(?![a-z])",
     re.IGNORECASE,
 )
-_KEYWORD = re.compile(r"\bml\b|\bcl\b|\blit(?:er|re)|\bfl\.?\s*oz|\bfluid ounce", re.IGNORECASE)
+_KEYWORD = re.compile(r"\bml\b|\bcl\b|\blit(?:er|re)|\bfl\.?\s*oz|\bfluid ounce|\bpint|\bquart|\bgallon",
+                      re.IGNORECASE)
 # A short line ending in a volume unit whose number was misread ("1 L" read as "TL",
 # "12 FL. OZ." as "ae. OZ."): a statement is probably there, just not readable.
 _UNIT_FRAGMENT = re.compile(r"^\W*[\w.]{0,4}\W*(?:m?l|cl|oz|fl\.?\s*oz)\.?\W*$", re.IGNORECASE)
@@ -40,6 +42,13 @@ def _unit(u: str) -> str:
         return "cl"
     if "oz" in u or "fluid" in u:
         return "floz"
+    u = u.removeprefix("us")
+    if u.startswith("p"):
+        return "pt"
+    if u.startswith("q"):
+        return "qt"
+    if u.startswith("g"):
+        return "gal"
     return "l"
 
 

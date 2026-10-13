@@ -1,0 +1,46 @@
+{
+  "case": "crazy_turtle_keg",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Shared keg collar: three products with three strengths, the right one ticked.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26224001000266",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26224001000266",
+    "class_code": "902 ALE",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26224001000266_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "CRAZY TURTLE",
+    "class_type": "Hazy India Pale Ale",
+    "alcohol_content": "6.5% Alc./Vol.",
+    "net_contents": "15.5 U.S. Gallons",
+    "producer_name_address": "Clearwater Brewing Company, Clearwater, FL",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "beer"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

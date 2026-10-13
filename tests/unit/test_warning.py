@@ -180,3 +180,44 @@ def test_confident_ocr_reading_of_an_altered_word_still_fails():
 def test_untrusted_ocr_never_passes():
     text = CANONICAL_WARNING.replace("risk", "tisk")
     assert check(text, confidences=conf(text, value=60.0)).status != Status.PASS
+
+
+# --- Found on authentic TTB-approved labels (Public COLA Registry, scripts/make_registry_fixtures.py)
+
+CAPS = "GOVERNMENT WARNING: " + CANONICAL_WARNING[len("GOVERNMENT WARNING: "):].upper()
+
+
+def test_body_in_capitals_passes():
+    # 27 CFR 16.22 sets the case of the heading only; most approved labels print the body in capitals.
+    c = check(CAPS)
+    assert c.status == Status.PASS and c.details["body_in_capitals"]
+
+
+@pytest.mark.parametrize("old,new", [
+    ("RISK OF", "RISKS OF"),            # Isolation Proof gin, approved
+    ("YOUR ABILITY", "YOVUR ABILITY"),  # Cave City rum, approved
+    ("DRIVE A CAR OR ", ""),            # Clearwater Light, approved
+])
+def test_capitals_body_still_checked_word_for_word(old, new):
+    assert check(CAPS.replace(old, new)).status == Status.FAIL
+
+
+def test_capitals_body_with_lowercase_heading_still_fails():
+    c = check("Government Warning: " + CAPS[len("GOVERNMENT WARNING: "):])
+    assert c.status == Status.FAIL and step(c, "heading") == "fail"
+
+
+def test_mixed_case_body_stays_case_sensitive():
+    # Only a body entirely in capitals is compared in capitals; one lowercased word is a change.
+    text = CANONICAL_WARNING.replace("According to the Surgeon General", "ACCORDING TO THE SURGEON GENERAL")
+    assert check(text).status == Status.FAIL
+
+
+def test_space_before_heading_colon_is_spacing_only():
+    c = check(CAPS.replace("WARNING:", "WARNING :", 1))
+    assert step(c, "heading") == "pass" and c.status == Status.PASS
+
+
+def test_capitals_ocr_merge_resplit():
+    c = check(CAPS.replace("OF THE RISK", "OFTHE RISK"))
+    assert step(c, "wording") == "pass"

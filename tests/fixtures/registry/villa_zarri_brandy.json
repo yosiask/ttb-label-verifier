@@ -1,0 +1,48 @@
+{
+  "case": "villa_zarri_brandy",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Low resolution (back label 319x653): the warning is ~5 px type, hyphenated 'PREG-NANCY'.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26197001000702",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26197001000702",
+    "class_code": "561 ITALIAN GRAPE BRANDY FB",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26197001000702_1",
+    "images/26197001000702_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "VILLA ZARRI",
+    "class_type": "Italian Brandy",
+    "alcohol_content": "53% Alc. by Vol.",
+    "net_contents": "700 mL",
+    "producer_name_address": "Small Victories Imports, Manhasset, NY",
+    "country_of_origin": "Italy",
+    "is_import": true,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "case": "kuheiji_sake",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Front is Japanese calligraphy; English statements on the back. 'GOVERNMENT WARNING :' spaced.",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26216001000640",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26216001000640",
+    "class_code": "981 SAKE - IMPORTED",
+    "registry_images": [
+      1,
+      2
+    ]
+  },
+  "images": [
+    "images/26216001000640_1",
+    "images/26216001000640_2"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "KUHEIJI",
+    "class_type": "Sake",
+    "alcohol_content": "15% Alc./Vol.",
+    "net_contents": "720 mL",
+    "producer_name_address": "Kuheiji USA, Manhasset, NY",
+    "country_of_origin": "Japan",
+    "is_import": true,
+    "beverage_type": "wine"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

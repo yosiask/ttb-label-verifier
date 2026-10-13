@@ -65,6 +65,12 @@ def _tokens_with_confidence(
     return _rejoin_tokens([(w, None) for w in raw])
 
 
+def _all_caps_body(words: list[str]) -> bool:
+    """The body (after the heading) set entirely in capitals, as many approved labels print it."""
+    body = " ".join(words[2:])
+    return any(c.isalpha() for c in body) and not any(c.islower() for c in body)
+
+
 def _resplit_ocr_merges(tokens: list[tuple[str, float | None]]) -> list[tuple[str, float | None]]:
     """Offline OCR drops spaces on small print ("ofthe", "defects.(2)"). Where a token is
     exactly two or three consecutive words of the required text run together, split it
@@ -75,8 +81,12 @@ def _resplit_ocr_merges(tokens: list[tuple[str, float | None]]) -> list[tuple[st
         split = None
         for n in (2, 3):
             for i in range(len(CANONICAL_WORDS) - n + 1):
-                if "".join(CANONICAL_WORDS[i:i + n]) == word:
-                    split = CANONICAL_WORDS[i:i + n]
+                run = CANONICAL_WORDS[i:i + n]
+                if "".join(run) == word:
+                    split = run
+                    break
+                if i >= 2 and "".join(run).upper() == word:  # body in capitals ("OFTHE")
+                    split = [w.upper() for w in run]
                     break
             if split:
                 break
@@ -162,14 +172,17 @@ def check_warning(
             heading_status = Status.NEEDS_REVIEW if ocr_untrusted else Status.FAIL
             heading_reason = "The statement does not begin with \"GOVERNMENT WARNING:\"." + untrusted_note
         else:
-            words_part = found_text[: m.end()].rstrip(":;., ")
+            words_part = " ".join(found_text[: m.end()].rstrip(":;., ").split())
             problems = []
             if words_part != "GOVERNMENT WARNING":
                 problems.append(f"the heading reads \"{words_part}\"; it must be in capital letters")
             if m.group(1) != ":":
                 problems.append("the colon after \"GOVERNMENT WARNING\" is missing")
-            heading_status = Status.FAIL
-            heading_reason = "Heading problem: " + " and ".join(problems) + "."
+            if problems:
+                heading_status = Status.FAIL
+                heading_reason = "Heading problem: " + " and ".join(problems) + "."
+            else:  # "GOVERNMENT WARNING :" — capitals and colon present, only the spacing differs
+                heading_reason = "Heading reads \"GOVERNMENT WARNING:\" (spacing differs only)."
             # A missing colon or odd punctuation on a word OCR was unsure of may be a reading error.
             if words_part == "GOVERNMENT WARNING" and low_conf([0, 1]):
                 heading_status = Status.NEEDS_REVIEW
@@ -177,21 +190,28 @@ def check_warning(
     steps.append({"step": "heading", "status": heading_status.value, "reason": heading_reason})
     statuses.append(heading_status)
 
-    # 3. Wording: exact and case-sensitive after whitespace normalization.
+    # 3. Wording: exact and case-sensitive after whitespace normalization. 27 CFR 16.22 sets the case
+    # of the heading only; a body set entirely in capitals (common on approved registry labels) is
+    # compared in capitals. A mixed-case body stays case-sensitive: a lowercased word is a change.
+    canon = CANONICAL_WORDS
+    caps_body = _all_caps_body(found_words)
+    if caps_body:
+        canon = CANONICAL_WORDS[:2] + [w.upper() for w in CANONICAL_WORDS[2:]]
     diff: list[dict] = []
     illegible = _ILLEGIBLE.search(found_text)
     punctuation_noise = False
     if illegible:
         # The reader marked words it could not read (glare, blur): neither proof of a violation nor a match.
-        diff = word_diff(CANONICAL_WORDS, found_words)
+        diff = word_diff(canon, found_words)
         wording_status = Status.NEEDS_REVIEW
         wording_reason = ("Part of the warning could not be read (marked as illegible by the reader). "
                           "Compare the warning by eye or request a clearer image.")
-    elif found_words == CANONICAL_WORDS:
-        wording_status, wording_reason = Status.PASS, "Wording matches the required text word for word."
+    elif found_words == canon:
+        wording_status, wording_reason = Status.PASS, "Wording matches the required text word for word" + (
+            " (body printed in capitals)." if caps_body else ".")
     else:
-        diff = word_diff(CANONICAL_WORDS, found_words)
-        sm = difflib.SequenceMatcher(a=CANONICAL_WORDS, b=found_words, autojunk=False)
+        diff = word_diff(canon, found_words)
+        sm = difflib.SequenceMatcher(a=canon, b=found_words, autojunk=False)
         opcodes = [op for op in sm.get_opcodes() if op[0] != "equal"]
         # Heading-only differences are already reported by step 2.
         opcodes_body = [op for op in opcodes if op[2] > 2 or (op[0] == "insert" and op[1] >= 2)]
@@ -203,9 +223,9 @@ def check_warning(
         for tag, i1, i2, j1, j2 in opcodes_body:
             if tag == "replace" and (i2 - i1) == (j2 - j1):
                 for a, b in zip(range(i1, i2), range(j1, j2)):
-                    edits += Levenshtein.distance(CANONICAL_WORDS[a], found_words[b])
+                    edits += Levenshtein.distance(canon[a], found_words[b])
                     affected.append(b)
-                    if _ALNUM.sub("", CANONICAL_WORDS[a]) != _ALNUM.sub("", found_words[b]):
+                    if _ALNUM.sub("", canon[a]) != _ALNUM.sub("", found_words[b]):
                         punctuation_only = False
         if not opcodes_body:
             wording_status, wording_reason = Status.PASS, "Body wording matches the required text word for word."
@@ -293,6 +313,8 @@ def check_warning(
         extra["punctuation_only"] = True
     if illegible:
         extra["illegible"] = True
+    if caps_body:
+        extra["body_in_capitals"] = True
     return result(overall, reason, "exact wording, capitals, bold (27 CFR 16.21-16.22)", found_text, diff=diff, **extra)
 
 

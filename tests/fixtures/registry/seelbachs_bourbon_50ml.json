@@ -1,0 +1,46 @@
+{
+  "case": "seelbachs_bourbon_50ml",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "compliant",
+  "description": "Single 50 mL wrap label; the warning is printed sideways (rotated 90 degrees).",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26236001000188",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26236001000188",
+    "class_code": "101 STRAIGHT BOURBON WHISKY",
+    "registry_images": [
+      1
+    ]
+  },
+  "images": [
+    "images/26236001000188_1"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "SEELBACH'S",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol_content": "50% Alc/Vol (100 Proof)",
+    "net_contents": "50 mL",
+    "producer_name_address": "Seelbach's Spirits, LLC, Jacksonville, FL",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

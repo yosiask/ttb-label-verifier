@@ -1,0 +1,62 @@
+{
+  "case": "isolation_proof_gin",
+  "kind": "as_filed",
+  "authentic": true,
+  "truth": "violation",
+  "description": "Approved back label reads 'because of the RISKS of birth defects' (required: 'risk').",
+  "source": {
+    "registry": "TTB Public COLA Registry",
+    "ttb_id": "26226001000267",
+    "url": "https://ttbonline.gov/colasonline/viewColaDetails.do?action=publicFormDisplay&ttbid=26226001000267",
+    "class_code": "210 GIN",
+    "registry_images": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "images": [
+    "images/26226001000267_1",
+    "images/26226001000267_2",
+    "images/26226001000267_3",
+    "images/26226001000267_4"
+  ],
+  "all_sides": true,
+  "application": {
+    "brand_name": "ISOLATION PROOF",
+    "class_type": "Gin",
+    "alcohol_content": "45% Alc/Vol",
+    "net_contents": "750 mL",
+    "producer_name_address": "Isolation Proof, Bloomville, N.Y.",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
+      }
+    }
+  }
+}
