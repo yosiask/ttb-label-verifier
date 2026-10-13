@@ -71,7 +71,7 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
             check_warning(extracted.warning_text, extracted.warning_heading_bold, extracted.warning_body_bold,
                           extracted.word_confidences, low_conf, t,
                           reader_sees_bold=extracted.provider == "azure_vision",
-                          weight_ratio=extracted.cross_check.warning_weight_ratio if extracted.cross_check else None),
+                          weight_ratio=_trusted_weight_ratio(extracted.cross_check, t)),
             extracted.cross_check, t),
     ]
 
@@ -83,6 +83,20 @@ def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresho
                 c.status = Status.NEEDS_REVIEW
                 c.reason = "The image is too hard to read to confirm this. Request a better image."
     return checks, readable
+
+
+def _trusted_weight_ratio(ocr: ExtractedLabel | None, t: Thresholds) -> float | None:
+    """The stroke-weight ratio is measured on the offline OCR's word boxes. It is evidence only
+    when that OCR read the heading and was sure of the warning's words (a confidently read altered
+    warning still counts), so the boxes sit on the right words: on registry artwork a misread warning ("ee sea TO THE SURGE!") measured a bold heading
+    as the same weight as its body."""
+    if ocr is None or ocr.warning_weight_ratio is None:
+        return None
+    own = check_warning(ocr.warning_text, None, None, ocr.word_confidences, False, t)
+    unsure = (_step(own, "wording") == Status.NEEDS_REVIEW.value and not own.details.get("punctuation_only"))
+    if _step(own, "heading") != Status.PASS.value or unsure:
+        return None  # the OCR could not place the heading, or was unsure of the words it measured
+    return ocr.warning_weight_ratio
 
 
 def _step(check: FieldCheck, name: str) -> str | None:

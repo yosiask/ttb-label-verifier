@@ -46,6 +46,9 @@ _NATIVE_NAMES = {
     "österreich": "austria", "schweiz": "switzerland", "suisse": "switzerland", "polska": "poland",
     "hellas": "greece", "ellada": "greece", "nederland": "netherlands", "belgique": "belgium", "belgie": "belgium",
 }
+# "Distilled in a traditional pot still", "made in small batches": the prefix, but no country.
+_NOT_A_COUNTRY = re.compile(r"^(?:a|an|our|small|copper|pot|oak|batch|batches|house|traditional|the finest|"
+                            r"limited|single|charred|new|used|old)\b")
 # A country statement in another language ("Hecho en Mexico", "Produit de France"): not compared by
 # translation; the reviewer reads it.
 _FOREIGN_COUNTRY = re.compile(
@@ -288,7 +291,7 @@ def _country_unclear(norm: str, expected: str) -> str | None:
         return (f"The country of origin is stated in another language (\"{norm}\"). "
                 "Check by eye that it names the country in the application.")
     m = _COUNTRY_PREFIX.search(norm)
-    if m and len(m.group(1).split()) <= 4:
+    if m and len(m.group(1).split()) <= 4 and not _NOT_A_COUNTRY.match(m.group(1)):
         return None  # "Product of X": a clear statement naming another country
     if f" {expected} " in f" {norm} ":
         return "The country is named on the label but not in a usual country of origin statement. Check by eye."
@@ -340,8 +343,8 @@ def check_country(
         # "PRODUCT OF FRANCE | RED WINE | 750 ML": each part of a line separately.
         for part in re.split(r"\s*[|\u2022\u00b7]\s*", span.text):
             m = _COUNTRY_PREFIX.search(normalize(part))
-            if m and len(m.group(1).split()) <= 4:  # "distilled in a traditional pot still ..." is not one
-                statements.append((span.text, m.group(1)))
+            if m and len(m.group(1).split()) <= 4 and not _NOT_A_COUNTRY.match(m.group(1)):
+                statements.append((span.text, m.group(1)))  # not "distilled in a traditional pot still"
     for text, country in statements:
         if _canon_country(country) == expected:
             return fc(Status.PASS, text, "Country of origin statement matches the application.")

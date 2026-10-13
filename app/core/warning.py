@@ -227,8 +227,16 @@ def check_warning(
                     affected.append(b)
                     if _ALNUM.sub("", canon[a]) != _ALNUM.sub("", found_words[b]):
                         punctuation_only = False
+        trailing = (len(opcodes_body) == 1 and opcodes_body[0][0] == "insert" and opcodes_body[0][1] == len(canon))
         if not opcodes_body:
             wording_status, wording_reason = Status.PASS, "Body wording matches the required text word for word."
+        elif trailing:
+            # The whole required text, then more ("CONTAINS SULFITES" on registry labels): readers cannot
+            # tell a separate statement printed below from words added to the warning.
+            extra_words = " ".join(found_words[opcodes_body[0][3]:opcodes_body[0][4]])
+            wording_status = Status.NEEDS_REVIEW
+            wording_reason = (f"The required wording is complete, followed by \"{extra_words}\". Check by eye that "
+                              "this is a separate statement, not part of the warning.")
         elif not whole_word_change and punctuation_only and edits <= t.warning_noise_max_edits:
             # Readers often confuse "," and "." on small or blurred print, even when confident.
             wording_status = Status.NEEDS_REVIEW

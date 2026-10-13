@@ -217,3 +217,9 @@ def test_producer_other_name_still_fails():
 ])
 def test_country_statement_parts(text, expected, status):
     assert check_country(expected, True, LabelText.from_full_text(text), None, False).status == status
+
+
+def test_production_phrase_is_not_a_country_statement():
+    label = LabelText.from_full_text("Double distilled in a traditional\nCharentais pot still\nBOLOGNA-ITALIA")
+    assert check_country("Italy", True, label, None, False).status == Status.NEEDS_REVIEW
+    assert check_country("Italy", True, label, "Double distilled in a traditional", False).status == Status.NEEDS_REVIEW

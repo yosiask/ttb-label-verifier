@@ -102,6 +102,13 @@ def check_net_contents(
             same_unit = _fmt_ml(ml) == _fmt_ml(exp_ml) and clean(expected_raw).lower() in line.lower()
             reason = "Net contents match." if same_unit else f"Net contents match ({line} = {_fmt_ml(exp_ml)})."
             return fc(Status.PASS, line, reason, **details)
+    if extracted_value is not None:
+        # The reader picked one statement; a keg collar lists several sizes as tick boxes.
+        for ml, line in parse_volumes(label_text or ""):
+            if abs(ml - exp_ml) <= exp_ml * t.net_contents_tolerance:
+                return fc(Status.NEEDS_REVIEW, line,
+                          f"The label shows {_fmt_ml(found_vols[0][0])} and also {line}. Check by eye which "
+                          "net contents applies to this container.", **details)
     ml, line = found_vols[0]
     return fc(Status.FAIL, line,
               f"The label shows {_fmt_ml(ml)}; the application says {_fmt_ml(exp_ml)}.", **details)

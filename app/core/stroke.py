@@ -46,6 +46,11 @@ def heading_weight_ratio(gray: np.ndarray, heading: list[Box], body: list[Box],
     line_h = bottom - top
     if line_h < 6:
         return None
+    # Words that do not share one printed line (rotated or curved text read as one "line") are not
+    # comparable: registry labels with a sideways warning measured "same weight" from such boxes.
+    word_h = float(np.median([b[3] for b in heading + body]))
+    if line_h > 2.5 * word_h:
+        return None
     scale = min(4.0, max(1.0, target_height / line_h))
 
     def measure(box: Box) -> float | None:

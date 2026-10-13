@@ -57,3 +57,10 @@ def test_us_units_parsed(text, ml):
 def test_pint_label_matches_ounce_application():
     assert check_net_contents("16 fl oz", "1 PINT ALE", False).status == Status.PASS
     assert check_net_contents("12 fl oz", "1 PINT ALE", False).status == Status.FAIL
+
+
+def test_keg_collar_other_size_picked_by_reader_is_review():
+    text = "Net Contents: 5.16 U.S. Gallons  7.75 U.S. Gallons  15.5 U.S. Gallons"
+    c = check_net_contents("15.5 U.S. Gallons", text, False, extracted_value="5.16 U.S. Gallons")
+    assert c.status == Status.NEEDS_REVIEW
+    assert check_net_contents("1 L", text, False, extracted_value="5.16 U.S. Gallons").status == Status.FAIL

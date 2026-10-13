@@ -226,3 +226,12 @@ def test_capitals_ocr_merge_resplit():
 def test_missing_space_after_number_is_spacing_for_any_reader():
     text = CANONICAL_WARNING.replace("(1) According", "(1)According").replace("(2) Consumption", "(2)Consumption")
     assert check_warning(text, True, False, [], False).details["steps"][2]["status"] == "pass"
+
+
+def test_text_after_complete_warning_is_review():
+    c = check(CAPS + " CONTAINS SULFITES")
+    assert c.status == Status.NEEDS_REVIEW and "separate statement" in c.reason
+
+
+def test_words_added_inside_warning_still_fail():
+    assert check(CAPS.replace("HEALTH PROBLEMS.", "SERIOUS HEALTH PROBLEMS.")).status == Status.FAIL
