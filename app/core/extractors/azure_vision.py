@@ -218,6 +218,9 @@ class AzureVisionExtractor:
         except (ValueError, ValidationError, TypeError, IndexError, AttributeError) as e:
             raise ProviderUnavailableError("The cloud AI engine returned an answer that could not be used.") from e
 
+        usage = getattr(resp, "usage", None)
+        token_usage = {k: int(getattr(usage, k)) for k in ("prompt_tokens", "completion_tokens")
+                       if isinstance(getattr(usage, k, None), int)} if usage else None
         notes = []
         if reading.legibility != "clear" and reading.legibility_note:
             notes.append(reading.legibility_note.strip().rstrip("."))
@@ -233,4 +236,5 @@ class AzureVisionExtractor:
             extraction_ms=int((t2 - t1) * 1000),
             preprocess_ms=int((t1 - t0) * 1000),
             notes=notes,
+            token_usage=token_usage or None,
         )

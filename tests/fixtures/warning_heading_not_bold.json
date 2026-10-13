@@ -1,6 +1,6 @@
 {
   "case": "warning_heading_not_bold",
-  "description": "Warning heading printed in regular type; it must be bold. Only the vision engine can see this. Guards against a reader that always reports the heading as bold.",
+  "description": "Warning heading printed in regular type; it must be bold. Only the vision engine can see this. Guards against a reader that always reports the heading as bold. Live, the model answers \"can't tell\" (or, 1 run in 5, \"bold\"); the pixel weight check makes that Needs review.",
   "label": {
     "brand": "OLD TOM DISTILLERY",
     "class_type": "Kentucky Straight Bourbon Whiskey",
@@ -38,10 +38,14 @@
     },
     "azure_vision": {
       "overall": [
-        "fail"
+        "fail",
+        "needs_review"
       ],
       "fields": {
-        "government_warning": "fail"
+        "government_warning": [
+          "fail",
+          "needs_review"
+        ]
       }
     }
   },

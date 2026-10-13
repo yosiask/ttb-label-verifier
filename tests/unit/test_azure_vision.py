@@ -26,8 +26,8 @@ READING = {
 
 
 class FakeCompletions:
-    def __init__(self, content=None, error=None, finish_reason="stop"):
-        self.content, self.error, self.finish_reason = content, error, finish_reason
+    def __init__(self, content=None, error=None, finish_reason="stop", usage=None):
+        self.content, self.error, self.finish_reason, self.usage = content, error, finish_reason, usage
         self.calls = []
 
     def create(self, **kwargs):
@@ -35,7 +35,8 @@ class FakeCompletions:
         if self.error:
             raise self.error
         msg = SimpleNamespace(content=self.content)
-        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason=self.finish_reason)])
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason=self.finish_reason)],
+                               usage=self.usage)
 
 
 def extractor(**kw):
@@ -192,3 +193,11 @@ def test_rate_limit_is_unavailable_so_auto_falls_back():
     ex, _ = extractor(error=rate_limit_error({}))
     with pytest.raises(ProviderUnavailableError, match="usage limit"):
         ex.extract(img())
+
+
+def test_token_usage_reported_for_cost_tracking():
+    ex, _ = extractor(content=json.dumps(READING), usage=SimpleNamespace(prompt_tokens=2900, completion_tokens=410,
+                                                                         total_tokens=3310))
+    assert ex.extract(img()).token_usage == {"prompt_tokens": 2900, "completion_tokens": 410}
+    ex, _ = extractor(content=json.dumps(READING))
+    assert ex.extract(img()).token_usage is None

@@ -166,4 +166,5 @@ def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExt
         message=" ".join(notes) or None,
         image_quality=quality,
         timings_ms=timings,
+        token_usage=extracted.token_usage,
     )

@@ -73,6 +73,7 @@ def main() -> None:
                         false_pass=body["overall"] == "pass" and "pass" not in exp["overall"],
                         false_fail=body["overall"] == "fail" and "fail" not in exp["overall"],
                         field_misses=misses, fields=fields, timings=body["timings_ms"], message=body.get("message"),
+                        tokens=body.get("token_usage"),
                         warning=next((c for c in body["checks"] if c["field"] == "government_warning"), {}).get("reason"),
                     )
                 else:
@@ -96,6 +97,12 @@ def main() -> None:
         ext = [r["timings"].get("extract", 0) for r in done]
         print(f"round trip p50={pct(rt, .5):.0f} p95={pct(rt, .95):.0f} max={max(rt):.0f} ms | "
               f"server p50={pct(srv, .5):.0f} p95={pct(srv, .95):.0f} | extract mean={statistics.mean(ext):.0f} ms")
+        tok = [r["tokens"] for r in done if r.get("tokens")]
+        if tok:
+            pin = [t["prompt_tokens"] for t in tok]
+            pout = [t["completion_tokens"] for t in tok]
+            print(f"tokens per cloud call: prompt mean={statistics.mean(pin):.0f} max={max(pin)} | "
+                  f"completion mean={statistics.mean(pout):.0f} max={max(pout)} (n={len(tok)})")
 
 
 if __name__ == "__main__":

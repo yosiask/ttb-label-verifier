@@ -63,6 +63,8 @@ class ExtractedLabel(BaseModel):
     # Offline OCR only: warning heading stroke / body stroke measured from pixels (see stroke.py).
     # About 1.8 for a bold heading over a regular body; about 1.0 when both have the same weight.
     warning_weight_ratio: float | None = None
+    # Cloud only: tokens billed for the call, e.g. {"prompt_tokens": 2900, "completion_tokens": 410}.
+    token_usage: dict[str, int] | None = None
 
 
 class ImageQuality(BaseModel):
@@ -93,3 +95,5 @@ class VerificationResult(BaseModel):
     message: str | None = None  # banner-level explanation, e.g. "request a better image"
     image_quality: ImageQuality | None = None
     timings_ms: dict[str, int]
+    # Tokens billed for the cloud call, for cost tracking; None when the cloud was not used.
+    token_usage: dict[str, int] | None = None
