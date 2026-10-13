@@ -165,3 +165,12 @@ def test_vision_different_brand_with_app_value_elsewhere_is_still_review():
     text = "RIVER BEND\nBottled by Stone's Throw Distillery, Frankfort, Kentucky"
     r = brand("STONE'S THROW", text, extracted="RIVER BEND")
     assert r.status != Status.PASS
+
+
+def test_brewed_and_canned_by_prefix_is_not_extra_wording():
+    from app.core.rules.text_fields import match_text_field
+    v = "Brewed and Canned by Iron Gate Brewing Co., Asheville, North Carolina"
+    r = match_text_field("producer_name_address", "Iron Gate Brewing Co., Asheville, North Carolina",
+                         LabelText.from_full_text("IRON GATE\n" + v), v, False, T.producer_pass, T.producer_review,
+                         "token", T)
+    assert r.check.status == Status.PASS

@@ -37,6 +37,11 @@ class Thresholds:
     # Government warning: OCR noise vs real violation.
     warning_noise_max_edits: int = 3
     warning_noise_word_conf: float = 80  # 0..100
+    # Offline OCR: below this mean word confidence over the warning, the small print was not read
+    # reliably, so wording differences and a heading not read at all are Needs review, not Fail.
+    # Measured mean confidence: clean fixtures ~95.7; hard photos (tiny, curved, glare) 69-85;
+    # photo violations with altered or paraphrased words 89-91.
+    warning_ocr_trust_conf: float = 86
 
     # Bold cross-check (heading stroke / body stroke from pixels). Fixtures: bold heading over a
     # regular body 1.8-2.0; same weight 0.95-1.03; blur and low resolution pull it toward 1.

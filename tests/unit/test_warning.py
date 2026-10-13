@@ -164,3 +164,19 @@ def test_illegible_part_is_review_not_fail(marker):
     text = CANONICAL_WARNING.replace("risk of birth defects. (2) Consumption", f"ris{marker} consumption")
     r = check_warning(text, True, False, [], False, reader_sees_bold=True, weight_ratio=1.8)
     assert r.status == Status.NEEDS_REVIEW and "could not be read" in r.reason
+
+
+def test_untrusted_ocr_reading_is_review_not_fail():
+    text = CANONICAL_WARNING.replace("risk", "tisk").replace("operate", "(pert")
+    r = check(text, confidences=conf(text, value=78.0))
+    assert r.status == Status.NEEDS_REVIEW and "not confident" in r.reason
+
+
+def test_confident_ocr_reading_of_an_altered_word_still_fails():
+    text = CANONICAL_WARNING.replace("cause health", "cause serious health")
+    assert check(text, confidences=conf(text, value=90.0)).status == Status.FAIL
+
+
+def test_untrusted_ocr_never_passes():
+    text = CANONICAL_WARNING.replace("risk", "tisk")
+    assert check(text, confidences=conf(text, value=60.0)).status != Status.PASS

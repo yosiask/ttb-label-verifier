@@ -140,6 +140,13 @@ def check_warning(
     found_words = [w for w, _ in tokens]
     found_text = " ".join(found_words)
     statuses: list[Status] = []
+    known = [c for _, c in tokens if c is not None]
+    # Offline OCR that was not confident reading the warning's small print: its differences
+    # are not evidence of a violation (never a Pass either).
+    ocr_untrusted = bool(known) and sum(known) / len(known) < t.warning_ocr_trust_conf
+    untrusted_note = (f" The offline reader was not confident reading this small print (average "
+                      f"{sum(known) / len(known):.0f}% confidence), so this may be a reading error. Compare by eye."
+                      if ocr_untrusted else "")
 
     def low_conf(idx: list[int], unknown_is_unsure: bool = False) -> bool:
         confs = [tokens[i][1] for i in idx if i < len(tokens)]
@@ -152,8 +159,8 @@ def check_warning(
     if not found_text.startswith(HEADING):
         m = _HEADING_LOOSE.match(found_text)
         if not m:
-            heading_status = Status.FAIL
-            heading_reason = "The statement does not begin with \"GOVERNMENT WARNING:\"."
+            heading_status = Status.NEEDS_REVIEW if ocr_untrusted else Status.FAIL
+            heading_reason = "The statement does not begin with \"GOVERNMENT WARNING:\"." + untrusted_note
         else:
             words_part = found_text[: m.end()].rstrip(":;., ")
             problems = []
@@ -212,6 +219,9 @@ def check_warning(
             wording_status = Status.NEEDS_REVIEW
             wording_reason = ("Possible reading error: a few letters differ in words the reader was unsure of. "
                               "Compare the warning by eye.")
+        elif ocr_untrusted:
+            wording_status = Status.NEEDS_REVIEW
+            wording_reason = _describe_diff(diff) + untrusted_note
         else:
             wording_status = Status.FAIL
             wording_reason = _describe_diff(diff)

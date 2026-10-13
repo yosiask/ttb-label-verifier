@@ -25,7 +25,8 @@ FIELD_LABELS = {
 
 _PRODUCER_PREFIX = re.compile(
     r"^(?:(?:distilled|bottled|produced|blended|made|brewed|vinted|cellared|imported|"
-    r"manufactured|packed|aged|crafted|and|&)\s+)+by\s+",
+    r"manufactured|packed|aged|crafted|canned|kegged|filled|packaged|prepared|finished|matured|"
+    r"rectified|and|&)\s+)+by\s+",
 )
 _COUNTRY_PREFIX = re.compile(
     r"\b(?:product of|produce of|produced in|imported from|made in|distilled in|country of origin)\s+(.+)$"
