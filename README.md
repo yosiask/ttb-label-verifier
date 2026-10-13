@@ -2,7 +2,7 @@
 
 Checks an alcohol beverage label image against the data in its application (brand, class/type, alcohol content, net contents, producer, country of origin, government warning). It returns a field-by-field checklist: **Pass**, **Needs review** or **Fail**, with the expected value, the value found on the label, the rule applied, and the reason.
 
-> **Status: Milestone 2 in progress.** The single-label check works with offline OCR. The cloud vision engine is built and tested against a mocked client, but it is not deployed yet: the Azure resources are waiting for approval. Batch mode and the full write-up come in later milestones; this README will be completed in Milestone 5.
+> **Status: Milestone 2, deployed.** Live at **https://ttb-label-verifier.salmonsky-e6ff55c6.eastus2.azurecontainerapps.io** (no login). Single-label checks work with the cloud vision engine and the offline OCR engine. Batch mode and the full write-up come in later milestones; this README will be completed in Milestone 5.
 
 ## Run locally
 
@@ -41,6 +41,7 @@ Safeguards:
 - **Two readers for the warning.** With the cloud engine, offline OCR reads the same image in parallel. A vision model can "auto-correct" an altered warning to the standard wording it knows. If the two readers disagree about the warning text, the result is Needs review, never Pass. Tests simulate a model that always returns the standard warning and confirm that no violating fixture passes.
 - **Unreadable images are never Failed.** They come back as Needs review with "Request a better image."
 - **Unverified never means Pass.** The offline engine cannot see bold type, so with offline OCR, a label whose other checks all pass is **Needs review** for the warning. That is by design.
+- **Bold needs two independent sources to agree.** The cloud model's bold judgment is checked against a pixel measurement: the stroke thickness of "GOVERNMENT WARNING:" compared with the body text, taken from the offline OCR that already runs alongside. A bold heading over a regular body measures about 1.8-2.0x; same weight measures about 1.0x. If the model and the pixels disagree, the result is Needs review. This was added after live testing caught the model calling a regular-weight heading bold in 1 of 5 runs. The measurement is skipped on blurry photos, where blur thickens every stroke.
 
 ## Engines
 
@@ -99,7 +100,24 @@ python deploy/azure/app_deploy.py deploy -g rg-ttb-label-verifier --confirm  # a
 The app keeps nothing after a request. There is no database, and label content is never logged. During a request:
 
 - Uploads larger than 1 MB are briefly buffered to a temporary file by the web framework. The file is deleted when the request ends.
-- With the cloud engine, the image is sent to Azure OpenAI to be read. Azure OpenAI does not use it for training, but by default it may keep prompts for a limited time for abuse monitoring. (Microsoft's current wording will be confirmed before deployment.)
+- With the cloud engine, the image is sent to Azure OpenAI (regional Standard deployment in East US 2) to be read. Microsoft states that prompts and completions are not used to train or improve models and are not stored in the model. By default, Azure OpenAI abuse monitoring may store prompts and completions flagged as potentially abusive, in the resource's geography, for review by authorized Microsoft employees. Customers approved for modified abuse monitoring can turn that storage off ([Data, privacy, and security](https://learn.microsoft.com/en-us/azure/ai-foundry/responsible-ai/openai/data-privacy); [Abuse monitoring](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/abuse-monitoring), both checked 2026-10-13). This deployment uses the default.
+- The Container Apps environment has no log destination, so application and request logs are not retained. The API response includes the model's token counts for cost tracking, but no label content is logged.
+
+## Initial live results (Milestone 2)
+
+**Measured** on the deployed app, 2026-10-13, image `022ab51`. Requests came from a VPS outside Azure, so round-trip times include the internet. These are synthetic fixture labels, not real label photos. Real-looking labels and threshold tuning are Milestone 4.
+
+| Engine | Labels | As expected | False pass | False fail | Needs review | Round trip p50 / p95 | Server p50 / p95 |
+|---|---|---|---|---|---|---|---|
+| Cloud (gpt-4.1-mini) | 24 fixtures x 2 | 48/48 | 0 | 0 | 11 (23%) | 4.2 s / 4.9 s | 4.0 s / 4.7 s |
+| Offline OCR (same container) | 24 fixtures x 1 | 24/24 | 0 | 0 | 15 (63%) | 0.7 s / 1.0 s | 0.5 s / 0.6 s |
+
+- Cloud Needs review breakdown: 8 of the 11 are fixtures designed to need review (a brand one letter off, a brand found only in the address, an unreadable image, a regular-weight heading). The other 3 are degraded photos (glare, low resolution). Clear compliant labels: all Pass.
+- Earlier live runs (with stricter checks added since): before the bold measurement, the regular-weight-heading label passed 1 time in 5. After it, 0 passes in 11 runs, all Needs review. The all-bold warning failed 11 of 11 times, and the clean label passed 11 of 11.
+- Tokens per cloud call (measured): about 1,820 input and 245 output. At list prices (input $0.44/M, output $1.76/M) that is about **$0.0012 per label**.
+- Cold start: with minimum replicas 0, the app scales to zero after about 5 idle minutes. The next request then took **33 s** (measured), against about 3 s warm. Keeping one replica running avoids this.
+
+Simulated results (`tests/test_fixtures_vision_sim.py`, a scripted "perfect" reader plus real OCR) are separate. They check the rules and safeguards, not the model.
 
 ## Not checked by this tool
 
