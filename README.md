@@ -23,7 +23,7 @@ On a phone, **Take a photo** opens the rear camera.
 
 | Criterion | Evidence |
 |---|---|
-| Correctness and completeness | Every field in the brief is checked ([rules](#how-verification-works)). Measured on the deployed app, [validation report](docs/validation-report.md), including **authentic TTB-approved label artwork from the Public COLA Registry**: **0 false passes** with either engine and **0 false fails** with the cloud engine, over 354 labeled checks. 393 automated tests (`tests/`). |
+| Correctness and completeness | Every field in the brief is checked ([rules](#how-verification-works)). Measured on the deployed app, [validation report](docs/validation-report.md), including **authentic TTB-approved label artwork from the Public COLA Registry**: **0 overall false passes** and 0 field-level misses with either engine over 353 labeled checks; cloud engine false fails 0 on the synthetic sets and 2 of 31 on authentic artwork (one label). 403 automated tests (`tests/`). |
 | Code quality and organization | `app/core` is a pure, typed library (pydantic models, no web code): readers behind one `LabelExtractor` interface, rules in `app/core/rules` and `warning.py`, every threshold in `config.py`. `app/api` is a thin FastAPI layer. |
 | Appropriate technical choices | One container, no database, no build step: [design decisions](#design-decisions-and-trade-offs). The cloud model costs about $0.0012 per label (measured) and has a hard daily cap. |
 | User experience and error handling | One page, two tabs, one-click examples and sample batch. Plain-English errors (wrong file type, too large, unreadable, busy, rate limited). Color always paired with an icon and a word. Works on phones: the result table stacks into cards and the camera opens. Checked in a real browser (Chromium) at desktop and iPhone sizes. |
@@ -36,7 +36,7 @@ On a phone, **Take a photo** opens the rear camera.
 |---|---|---|
 | Field-by-field comparison | 7 fields, each with expected, found, rule and reason | `app/core/rules`, `tests/unit` |
 | Warning word for word, "GOVERNMENT WARNING:" in capitals and bold | Exact comparison with a word diff (a body in all capitals is accepted). Heading capitals and colon. Bold from the model **and** a pixel measurement, which must agree | `app/core/warning.py`, `app/core/stroke.py` |
-| About 5 seconds per label | Cloud, measured: 4.0 s typical (p50) / 4.9 s slowest 5% (p95) on flat labels; 4.9 s / 6.6 s on simulated photos; 5.6 s / 7.9 s on authentic registry artwork. Offline: 0.7 to 1.4 s typical. The time is shown on every result | [Measured performance](#measured-performance) |
+| About 5 seconds per label | Cloud, measured on the release build: 4.0 s typical (p50) on flat labels, 4.7 s on simulated photos, 5.7 s on authentic artwork; the slowest 5% (p95) took 6.0 to 8.8 s. **The target is met for typical labels, not for the slowest.** Offline: 1.1 to 1.8 s typical. The time is shown on every result | [Measured performance](#measured-performance) |
 | Usable without training, many users over 50 | 18 px base font, large buttons, one-click examples, plain-English reasons, colors always with an icon and a word | Screenshots; browser test |
 | Judgment on cosmetic differences | `STONE'S THROW` = `Stone's Throw` (Pass). A one-letter difference is **Needs review** with the letters shown, never an automatic Pass | `tests/unit/test_text_fields.py` |
 | Batch of 200 to 300 labels | CSV template, checked for problems before starting, 6 at a time, live progress, problems first, retry, CSV export | 300-label run below |
@@ -51,7 +51,7 @@ The engine **reads** each image with a reader and then **decides** with determin
 | Field | Rule |
 |---|---|
 | Brand name | Exact match ignoring capitalization, punctuation and spacing. A spelling difference, even one letter, is Needs review with the differing words shown |
-| Class/type, producer | Every expected word present (ignoring capitalization and punctuation). "Distilled and Bottled by …", "Brewed and Canned by …" and similar prefixes are allowed. A near-miss spelling is Needs review |
+| Class/type, producer | Every expected word present (ignoring capitalization and punctuation). "Distilled and Bottled by …", "Brewed and Canned by …" and similar prefixes are allowed. A near-miss spelling is Needs review. Class/type lines are also re-read close up by the offline reader; a one-letter variant ("BOUBON") holds a Pass for review |
 | Alcohol content | Numeric ABV comparison; any proof on the label must equal 2 × ABV. A label stating several strengths (a keg collar shared by products) is Needs review |
 | Net contents | Converted to mL (mL, cL, L, fl oz, pints, quarts, gallons), within 0.5% |
 | Country of origin | Imports only: "Product of …", "Made in …", "Imported from …". A statement in another language ("Hecho en …") or a native country name ("ITALIA") is Needs review |
@@ -63,6 +63,7 @@ The engine **reads** each image with a reader and then **decides** with determin
 - **No Pass from a stray hit.** Text found on the label confirms a field only on its own line, outside the warning, and not on a line already used by another field. Numbers count only next to their unit (`%`, `Proof`, `mL`, …).
 - **Two readers for the warning.** With the cloud engine, offline OCR reads the same image in parallel. If the offline reader doubts the wording the model read as exact, the result is Needs review. A simulated model that always returns the textbook warning and formatting never gets a violating label to Pass (`tests/test_fixtures_vision_sim.py`, `tests/test_photo_fixtures.py`).
 - **Bold is measured, not just asked.** The stroke thickness of "GOVERNMENT WARNING:" is compared with the body words on the same printed line: a bold heading over regular text measures about 1.7×, the same weight about 1.0×. A bold Pass **or Fail** needs the model's judgment **and** the measurement to agree. Live testing showed why: the model called a regular-weight heading bold 1 time in 5, and called an all-bold warning "heading bold, body regular"; on approved registry labels it called regular capitals "bold" and bold headings "not bold". The measurement counts only when the offline OCR read that warning's words confidently and on one printed line (a sideways warning or a misread one gives no measurement). On small print in photos the measurement often can't confirm bold, so those warnings are Needs review: unverified never means Pass.
+- **Readers "correct" misspellings.** On an approved label both readers read "BOUBON" as "BOURBON". The offline reader re-reads short class/type lines close up from unenhanced pixels (it stays blind to the application); a word one letter away from the application's holds the Pass for review.
 - **Front and back labels.** Up to 4 images per label are read in parallel and merged. Unless the reviewer ticks **These images show every side of the label**, anything not found is Needs review ("it may be on the back label"), not Fail. A statement that is present but wrong is Fail either way.
 
 **Safeguards against false fails**
@@ -81,42 +82,43 @@ The engine **reads** each image with a reader and then **decides** with determin
 
 ## Measured performance
 
-All numbers are **measured** on the deployed app (Azure Container Apps, 1 vCPU / 2 GiB per replica, 1 to 2 replicas, East US 2), from a client outside Azure, so they include the internet round trip. Build `a56bae2`, 2026-10-13, single-image labels.
+All numbers are **measured** on the deployed app (Azure Container Apps, 1 vCPU / 2 GiB per replica, 1 to 2 replicas, East US 2), from a client outside Azure, so they include the internet round trip. Release build `982d541`, 2026-10-13, single-image labels.
 
 | | Cloud AI | Offline OCR |
 |---|---|---|
-| Single label, p50 / p95 round trip: flat labels | 4.0 s / 4.9 s | 0.7 s / 1.0 s |
-| Simulated photos | 4.9 s / 6.6 s | 1.3 s / 2.1 s |
-| Authentic registry artwork (more text per label) | 5.6 s / 7.9 s | 1.1 s / 1.6 s |
+| Single label, p50 / p95 round trip: flat labels | 4.0 s / 7.4 s | 1.1 s / 1.4 s |
+| Simulated photos | 4.7 s / 5.8 s | 1.6 s / 2.4 s |
+| Authentic registry artwork (more text per label) | 5.7 s / 8.0 s | 1.6 s / 2.2 s |
 | 300-label batch through the UI (cloud engine, 6 at a time; build `e27a76a`) | **6 min 52 s** (44 labels/min), 0 errors, 299 of 300 read by the cloud engine, 0 false passes, 0 false fails | n/a |
-| Cost per label (list price, measured tokens) | about $0.0012 on the synthetic sets, $0.0018 on authentic artwork (≈2,550 input + ≈380 output tokens) | none beyond hosting |
+| Cost per label (list price, measured tokens) | about $0.0012 on the synthetic sets, $0.0018 on authentic artwork (≈2,500 input + ≈370 output tokens) | none beyond hosting |
 
 - The first request after the app has scaled to zero waited **33 s** for a cold start (measured with min replicas 0). The review deployment keeps one replica warm.
 - The batch ran on one replica. Each replica checks 3 labels at a time and paces cloud calls at 46 per minute, so about 45 labels per minute is that replica's ceiling. A second replica would roughly double throughput; with the platform's default scaling rule it starts only at 10 concurrent requests, and the batch sends 6.
-- An earlier build (`720b52a`) measured 3.5 s / 4.6 s on the synthetic sets; the same sets measured 4.0 s / 4.9 s and 4.9 s / 6.6 s on the final build. The prompt grew slightly; Azure response times also vary over the day, and this was not separated. A front + back pair takes about 0.5 s longer (both images are read in parallel). Cloud requests time out at 12 s and fall back to offline OCR; 2 of 178 timed out or hit a transient Azure error in the final run.
+- Latency varies with Azure: an earlier build (`720b52a`) measured 3.5 s / 4.6 s on the synthetic sets in the morning; on the release build in the afternoon the Azure model call alone took 3.7–4.7 s on a simple label, and 3 of 178 cloud requests hit the 12 s timeout (in normal use they fall back to offline OCR). The offline cross-check runs in parallel (about 0.85 s) and does not add to the time. A front + back pair takes about 0.5 s longer (both images are read in parallel).
 
 ## Validation summary
 
-[Full report with every label](docs/validation-report.md). Run with `scripts/run_accuracy.py`, build `a56bae2`, 2 repetitions per engine. Three sets, with expected results written by hand, never taken from the app:
+[Full report with every label](docs/validation-report.md). Run with `scripts/run_accuracy.py` on the release build `982d541`, 2 repetitions per engine. Three sets, with expected results written by hand, never taken from the app:
 
 - `clean`: 24 synthetic flat rendered labels.
 - `photos`: 31 **simulated** photographs (curvature, angle, glare, blur, small print, unusual fonts, front/back pairs). Not real photos.
-- `registry`: **authentic** TTB-approved label artwork for 21 records from the [Public COLA Registry](https://ttbonline.gov/colasonline/publicSearchColasBasic.do), 34 cases: as filed, front panel only, and untouched artwork with one application field deliberately wrong. Five of the approved labels deviate from the rules (warning typos "yovur", "risks", "durring" with words missing, a class statement misspelled "BOUBON", a missing comma) and are scored as violations.
+- `registry`: **authentic** TTB-approved label artwork for 21 records from the [Public COLA Registry](https://ttbonline.gov/colasonline/publicSearchColasBasic.do), 34 cases: as filed, front panel only, and untouched artwork with one application field deliberately wrong. On five approved labels the artwork appears to differ from the rules (warning typos, a misspelled class statement, a missing comma). These are **potential findings that need independent confirmation**, not determinations; they are scored only as "must not Pass".
 
-| Engine | Set | Labels | False pass | False fail | Detection (Fail) | Flagged (not Pass) | Needs review | p50 / p95 round trip |
+| Engine | Set | Labels | Overall false pass | False fail | Detection (Fail) | Flagged (not Pass) | Needs review | p50 / p95 round trip |
 |---|---|---|---|---|---|---|---|---|
-| Cloud AI | clean | 47 | 0/27 | 0/20 | 19/23 (83%) | 23/23 | 8/43 (19%) | 4.0 s / 4.9 s |
-| Cloud AI | photos (simulated) | 62 | 0/36 | 0/26 | 26/32 (81%) | 32/32 | 32/58 (55%) | 4.8 s / 6.6 s |
-| Cloud AI | **registry (authentic)** | 67 | **0/36** | **0/31** | 16/24 (67%) | 24/24 | 39/55 (71%) | 5.6 s / 7.9 s |
-| Offline OCR | clean | 48 | 0/28 | 0/20 | 18/24 (75%) | 24/24 | 26/44 (59%) | 0.7 s / 1.0 s |
-| Offline OCR | photos (simulated) | 62 | 0/36 | 2/26 | 24/32 (75%) | 32/32 | 32/58 (55%) | 1.3 s / 2.1 s |
-| Offline OCR | registry (authentic) | 68 | 0/36 | 16/32 (50%) | 16/24 (67%) | 24/24 | 24/56 (43%) | 1.4 s / 3.3 s |
+| Cloud AI | clean | 47 | 0/27 | 0/20 | 19/23 (83%) | 23/23 | 8/43 (19%) | 4.0 s / 7.4 s |
+| Cloud AI | photos (simulated) | 61 | 0/36 | 0/25 | 27/32 (84%) | 32/32 | 30/57 (53%) | 4.7 s / 6.0 s |
+| Cloud AI | **registry (authentic)** | 67 | **0/36** | 2/31 (6%) | 16/24 (67%) | 24/24 | **37/55 (67%)** | 5.7 s / 8.8 s |
+| Offline OCR | clean | 48 | 0/28 | 0/20 | 18/24 (75%) | 24/24 | 26/44 (59%) | 1.1 s / 1.4 s |
+| Offline OCR | photos (simulated) | 62 | 0/36 | 2/26 | 24/32 (75%) | 32/32 | 32/58 (55%) | 1.7 s / 2.6 s |
+| Offline OCR | registry (authentic) | 68 | 0/36 | 16/32 (50%) | 16/24 (67%) | 24/24 | 24/56 (43%) | 1.8 s / 3.4 s |
 
-- **False pass** counts violations, and labels whose right answer is Needs review, that were marked Pass. **Needs review** is out of labels whose right answer is Pass or Fail. Two cloud requests failed (a 12 s timeout and a transient Azure error) and are excluded; in normal use they fall back to offline OCR.
-- **Authentic artwork changed the rules.** The first registry run, on the build before this work, failed 12 of 16 compliant approved labels: warnings printed in capitals, the model's wrong bold judgments, spacing, pints and gallons, keg collars, foreign country statements. Each cause was fixed with tests, without relaxing any false-pass safeguard ([details](docs/validation-report.md#authentic-registry-labels-what-was-tested-and-what-it-found)).
+- **Overall false pass** counts violations, and labels whose right answer is Needs review, that came back Pass overall: **none, on any set, with either engine.** **Needs review** is out of labels whose right answer is Pass or Fail. Three cloud requests timed out and are excluded.
+- **Field-level misses are counted separately:** a field that must not pass but did, on a label that was still Needs review or Fail overall. **None on the release build.** Before it, both readers read Woodson's "BOUBON" as "BOURBON" and its class/type passed (4 of 4 runs); a close-up re-read now holds it for review ([details](docs/validation-report.md#overall-false-passes-and-field-level-misses)).
+- **No compliant authentic label passed outright.** Cloud engine: 0 Pass, 29 Needs review, 2 Fail out of 31 compliant authentic checks (94% Needs review). Bold can't be confirmed on real print, and real producer statements carry more than the application value (street, ZIP, "for …"), which is shown for review. The tool narrows each label to the fields to look at, with reasons; it does not clear authentic labels on its own.
+- **Authentic artwork changed the rules.** The first registry run, on the build before this work, failed 12 of 16 compliant approved labels (warnings printed in capitals, the model's wrong bold judgments, spacing, pints and gallons, keg collars, foreign country statements). Each cause was fixed with tests, without relaxing any false-pass safeguard. The 2 remaining cloud false fails are one keg collar whose brewer name is only inside a logo.
 - **The two-reader safeguard worked on real artwork:** the cloud model silently read Cave City's "yovur" as "your"; the offline reader saw the difference, so the label is Needs review, not Pass.
-- **Gates (cloud engine):** false pass 0% met on every set; false fail 0% met on every set; Needs review ≤ 20% met only on flat labels (19%). Detection as Fail is below the 90% target (67–83%); every violation not failed was Needs review. On authentic artwork **no compliant label passes outright**: bold can't be confirmed on real print, and real producer statements carry more than the application value (street, ZIP, "for …"), which is shown for review.
-- **Field-level miss:** both readers read Woodson's "BOUBON" as "BOURBON", so the class/type field passed (the label was Needs review for other reasons). Letter-level misspellings in decorative type are a reader limitation the rules can't see.
+- **Gates (cloud engine):** overall false pass 0% met on every set; false fail 0% met on the synthetic sets, 6% on authentic artwork; Needs review ≤ 20% met only on flat synthetic labels (19%); detection as Fail 67–84%, below the 90% target, with every violation not failed flagged Needs review.
 
 Key thresholds (all in `app/core/config.py`):
 - brand: exact words to pass, similarity 85 or more is Needs review;
@@ -198,8 +200,8 @@ The app keeps nothing after a request: no database, no files, and label content 
 ## Limitations and assumptions
 
 - **Authentic artwork, not photographs.** The registry set is real approved label artwork (flat files as submitted to TTB); the photo set is simulated. Phone photographs of real bottles have not been measured.
-- **On authentic artwork nearly everything is Needs review** with the cloud engine (71%; no compliant label passed outright), mainly bold confirmation and producer statements with extra words. False passes and false fails were both 0. A lower review rate would need a reliable bold signal on real print, which neither the model nor the stroke measurement gives.
-- **Readers can correct misspellings** ("BOUBON" read as "BOURBON" by both readers). The warning has a second reader as a cross-check; other fields do not.
+- **On authentic artwork nearly everything is Needs review** with the cloud engine (67%; no compliant label passed outright), mainly bold confirmation and producer statements with extra words. Overall false passes were 0; false fails 2 of 31 (one keg collar, brewer name only in a logo). A lower review rate would need a reliable bold signal on real print, which neither the model nor the stroke measurement gives.
+- **Readers can correct misspellings** ("BOUBON" read as "BOURBON" by both readers). The warning has a second reader as a cross-check, and class/type lines get an offline close-up re-read (tuned on one real example; no false alarms on the 75 other labels). Brand and producer have neither.
 - **Offline OCR on authentic artwork** fails half of the compliant labels (decorative fonts, sideways and light-on-dark text). It never passed a violation. Use the cloud engine where allowed.
 - **Bold on small print in photos is often Needs review.** At about 13 px text height, regular and bold condensed type measure nearly the same. Our synthetic renders confirm bold reliably (bold headings measure about 1.7×); approved registry artwork did not (bold headings measured 0.96–1.36×), so authentic labels are usually Needs review for bold.
 - **Needs review rate on photos is high** (about half of the simulated photos with the cloud engine). That's the cost of the bold and two-reader safeguards. On flat synthetic labels it is within the 20% gate.
