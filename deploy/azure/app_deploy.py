@@ -60,7 +60,7 @@ APP_SETTINGS = {
     "CLOUD_DAILY_CAP": "1000",
     "RATE_LIMIT_PER_MINUTE": "120",
     "TRUSTED_PROXY_HOPS": "1",  # Container Apps ingress appends the client address
-    "AZURE_TIMEOUT_S": "8",
+    "AZURE_TIMEOUT_S": "12",  # registry artwork: text-heavy labels took 8-9 s; a timeout is worse than slow
     "AZURE_MAX_OUTPUT_TOKENS": "700",
     "CLOUD_WAIT_S": "45",  # batch requests wait this long for a cloud slot before using offline OCR
     "VISION_OCR_CROSSCHECK": "true",

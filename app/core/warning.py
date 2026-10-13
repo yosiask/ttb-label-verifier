@@ -72,7 +72,7 @@ def _all_caps_body(words: list[str]) -> bool:
 
 
 def _resplit_ocr_merges(tokens: list[tuple[str, float | None]]) -> list[tuple[str, float | None]]:
-    """Offline OCR drops spaces on small print ("ofthe", "defects.(2)"). Where a token is
+    """Small print loses spaces ("ofthe", "defects.(2)", "(1)According"). Where a token is
     exactly two or three consecutive words of the required text run together, split it
     back. Only spacing changes: every letter and punctuation mark must match, so this can
     never hide a changed, added or missing word."""
@@ -145,8 +145,8 @@ def check_warning(
     steps.append({"step": "present", "status": Status.PASS.value, "reason": "Warning statement found."})
 
     tokens = _tokens_with_confidence(warning_text, word_confidences)
-    if word_confidences:
-        tokens = _resplit_ocr_merges(tokens)
+    # Missing spaces ("(1)According", "ofthe") are spacing, which the rule normalizes, whoever read them.
+    tokens = _resplit_ocr_merges(tokens)
     found_words = [w for w, _ in tokens]
     found_text = " ".join(found_words)
     statuses: list[Status] = []
@@ -264,6 +264,12 @@ def check_warning(
             bold_status, bold_measured_conflict = Status.NEEDS_REVIEW, True
             bold_reason = (f"The reader reported that {' and '.join(parts)}, but the heading's strokes measure "
                            f"clearly heavier than the body's. {confirm}")
+        elif reader_sees_bold and not same:
+            # Registry labels: the vision model called regular capitals "bold" and bold headings "not bold".
+            # Its word alone neither passes nor fails the bold rule; a Fail needs the measurement to agree.
+            bold_status, bold_measured_conflict = Status.NEEDS_REVIEW, True
+            bold_reason = (f"The reader reported that {' and '.join(parts)}, but the type weight could not be "
+                           f"measured to confirm it. {confirm}")
         else:
             bold_status = Status.FAIL
             bold_reason = "Formatting problem: " + " and ".join(parts) + "."

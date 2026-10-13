@@ -38,6 +38,14 @@ _COUNTRY_ALIASES = {
     "holland": "netherlands", "the netherlands": "netherlands",
     "korea": "south korea", "republic of korea": "south korea",
 }
+# Country names as printed in the producer's language: enough for Needs review, never a Pass.
+_NATIVE_NAMES = {
+    "italia": "italy", "espana": "spain", "españa": "spain", "deutschland": "germany", "mexico": "mexico",
+    "méxico": "mexico", "republica dominicana": "dominican republic", "república dominicana": "dominican republic",
+    "nippon": "japan", "japon": "japan", "japón": "japan", "brasil": "brazil", "osterreich": "austria",
+    "österreich": "austria", "schweiz": "switzerland", "suisse": "switzerland", "polska": "poland",
+    "hellas": "greece", "ellada": "greece", "nederland": "netherlands", "belgique": "belgium", "belgie": "belgium",
+}
 # A country statement in another language ("Hecho en Mexico", "Produit de France"): not compared by
 # translation; the reviewer reads it.
 _FOREIGN_COUNTRY = re.compile(
@@ -329,9 +337,11 @@ def check_country(
     for span in label.spans:
         if len(span.lines) != 1:
             continue
-        m = _COUNTRY_PREFIX.search(span.norm)
-        if m:
-            statements.append((span.text, m.group(1)))
+        # "PRODUCT OF FRANCE | RED WINE | 750 ML": each part of a line separately.
+        for part in re.split(r"\s*[|\u2022\u00b7]\s*", span.text):
+            m = _COUNTRY_PREFIX.search(normalize(part))
+            if m and len(m.group(1).split()) <= 4:  # "distilled in a traditional pot still ..." is not one
+                statements.append((span.text, m.group(1)))
     for text, country in statements:
         if _canon_country(country) == expected:
             return fc(Status.PASS, text, "Country of origin statement matches the application.")
@@ -349,7 +359,10 @@ def check_country(
         text, _ = statements[0]
         return fc(Status.FAIL, text, f"The label's country of origin (\"{text}\") does not match \"{expected_raw}\".")
     for span in label.spans:
-        if len(span.lines) == 1 and fuzz.partial_ratio(expected, span.norm) >= t.country_pass and len(expected) >= 4:
+        words = span.norm.split()
+        native = {_NATIVE_NAMES.get(" ".join(words[i:i + n])) for n in (1, 2) for i in range(len(words) - n + 1)}
+        if len(span.lines) == 1 and ((fuzz.partial_ratio(expected, span.norm) >= t.country_pass and len(expected) >= 4)
+                                     or expected in native):
             return fc(Status.NEEDS_REVIEW, span.text,
                       "The country name appears on the label but not as a country of origin statement. Check by eye.")
     if low_confidence:

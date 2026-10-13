@@ -221,3 +221,8 @@ def test_space_before_heading_colon_is_spacing_only():
 def test_capitals_ocr_merge_resplit():
     c = check(CAPS.replace("OF THE RISK", "OFTHE RISK"))
     assert step(c, "wording") == "pass"
+
+
+def test_missing_space_after_number_is_spacing_for_any_reader():
+    text = CANONICAL_WARNING.replace("(1) According", "(1)According").replace("(2) Consumption", "(2)Consumption")
+    assert check_warning(text, True, False, [], False).details["steps"][2]["status"] == "pass"

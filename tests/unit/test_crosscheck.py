@@ -106,8 +106,17 @@ def test_vision_misread_vs_exact_ocr_is_review_not_fail(application):
 
 
 def test_bold_failure_kept_even_when_readers_disagree(application):
-    label = vision(body_bold=True).model_copy(update={"cross_check": make_label(warning=ALTERED)})
+    # The reader's bold failure is confirmed by the measured stroke weight (heading = body).
+    label = vision(body_bold=True).model_copy(update={"cross_check": make_label(warning=ALTERED,
+                                                                                warning_weight_ratio=1.0)})
     assert warning_check(application, label).status == Status.FAIL
+
+
+def test_unmeasured_bold_failure_from_vision_is_review(application):
+    # Registry labels: the model called regular capitals "bold". Unconfirmed, it is not a Fail.
+    label = vision(body_bold=True).model_copy(update={"cross_check": make_label()})
+    c = warning_check(application, label)
+    assert c.status == Status.NEEDS_REVIEW and "could not be measured" in c.reason
 
 
 def test_unreadable_ocr_does_not_override(application):

@@ -209,3 +209,11 @@ def test_producer_other_name_still_fails():
                          LabelText.from_full_text("FROSTY GOLD\nBREWED BY HUDSON ALE WORKS, BEACON, NY"), None, False,
                          T.producer_pass, T.producer_review, "token")
     assert m.check.status == Status.FAIL
+
+
+@pytest.mark.parametrize("text,expected,status", [
+    ("PRODUCT OF FRANCE | RED WINE | 750 ML | ALC. 16% BY VOL.", "France", Status.PASS),
+    ("Double distilled in a traditional Charentais pot still\nBOLOGNA-ITALIA", "Italy", Status.NEEDS_REVIEW),
+])
+def test_country_statement_parts(text, expected, status):
+    assert check_country(expected, True, LabelText.from_full_text(text), None, False).status == status
