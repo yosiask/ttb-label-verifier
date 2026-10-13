@@ -41,7 +41,8 @@ def _overall(checks: list[FieldCheck]) -> Status:
 
 def evaluate(application: ApplicationData, extracted: ExtractedLabel, t: Thresholds = THRESHOLDS) -> tuple[list[FieldCheck], bool]:
     """Apply every rule to what was read. Returns the checks and whether the image was readable."""
-    readable = extracted.confidence >= t.unreadable_below and bool(extracted.full_text.strip())
+    readable = extracted.confidence >= t.unreadable_below and bool(
+        extracted.full_text.strip() or (extracted.warning_text or "").strip())
     low_conf = extracted.confidence < t.low_confidence_below
     label = LabelText.from_full_text(extracted.full_text)
     f = extracted.fields
@@ -185,16 +186,25 @@ PARTIAL_LABEL_REASON = ("Not found on the uploaded image{s}. It may be on a side
                         "whole label, tick \"These images show every side of the label\".")
 
 
+OTHER_SIDE_HINT = ("It may also be on a side of the label that was not uploaded (for example the back label): "
+                   "upload every side, or tick \"These images show every side of the label\" if this is the whole label.")
+
+
 def soften_absences(checks: list[FieldCheck], n_images: int) -> None:
     """When the uploaded images may not show every side of the label, something missing is
     not proof of a violation: it may be on the back. Absent → Needs review; a statement that
     is present but wrong is still Fail."""
+    hint = PARTIAL_LABEL_REASON.format(s="s" if n_images > 1 else "", these="these" if n_images > 1 else "it",
+                                       verb="" if n_images > 1 else "s")
     for c in checks:
-        if c.status == Status.FAIL and (c.found is None or c.details.get("absent")):
+        absent = c.found is None or c.details.get("absent")
+        if c.status == Status.FAIL and absent:
             c.details["status_if_all_sides"] = c.status.value
             c.status = Status.NEEDS_REVIEW
-            c.reason = PARTIAL_LABEL_REASON.format(s="s" if n_images > 1 else "", these="these" if n_images > 1 else "it",
-                                                   verb="" if n_images > 1 else "s")
+            c.reason = hint
+        elif c.status == Status.NEEDS_REVIEW and c.found is None:
+            # Already uncertain (e.g. hard to read); say it may also be on another side.
+            c.reason = f"{c.reason} {OTHER_SIDE_HINT}"
 
 
 def _read_one(data: bytes, extractor: LabelExtractor) -> tuple[ExtractedLabel, ImageQuality, int]:

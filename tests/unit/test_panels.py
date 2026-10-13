@@ -101,3 +101,10 @@ def test_single_image_default_is_unchanged():
                                                   provider="azure_vision",
                                                   cross_check=make_label(warning_weight_ratio=1.8)), None))
     assert r.overall == Status.PASS and r.all_sides is True
+
+
+def test_hard_to_read_front_only_mentions_the_back_label():
+    blurry_front = make_label(text=FRONT_TEXT, warning=None, provider="azure_vision", confidence=0.6)
+    r = verify([png()], APP, PanelReader(blurry_front, back()), all_sides=False)
+    w = field(r, "government_warning")
+    assert w.status == Status.NEEDS_REVIEW and "back label" in w.reason

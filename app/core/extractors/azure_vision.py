@@ -52,7 +52,8 @@ and use null for a field that is not present or not legible at all.
 You are not told what the label should say, and you must not judge compliance."""
 
 USER_PROMPT = """Transcribe this label.
-- full_text: every line of text on the label, top to bottom, one printed line per line, exactly as printed.
+- full_text: every line of text on the label except the government warning statement, top to bottom,
+  one printed line per line, exactly as printed (the warning goes only in warning_text).
 - brand_name, class_type (e.g. "Kentucky Straight Bourbon Whiskey"), alcohol_content (the full statement,
   e.g. "45% Alc./Vol. (90 Proof)"), net_contents, producer_name_address (the full "bottled by ..." statement),
   country_of_origin (the full statement, e.g. "Product of Scotland"): exactly as printed, or null.
