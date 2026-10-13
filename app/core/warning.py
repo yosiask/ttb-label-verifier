@@ -27,6 +27,7 @@ CANONICAL_WARNING = (
 CANONICAL_WORDS = CANONICAL_WARNING.split()
 
 _ALNUM = re.compile(r"[^A-Za-z0-9]")
+_ILLEGIBLE = re.compile(r"\[illegible\]|\.\.\.|\u2026", re.IGNORECASE)
 _HEADING_LOOSE = re.compile(r"^\s*government\s+warning\s*([:;.,]?)", re.IGNORECASE)
 
 
@@ -171,7 +172,15 @@ def check_warning(
 
     # 3. Wording: exact and case-sensitive after whitespace normalization.
     diff: list[dict] = []
-    if found_words == CANONICAL_WORDS:
+    illegible = _ILLEGIBLE.search(found_text)
+    punctuation_noise = False
+    if illegible:
+        # The reader marked words it could not read (glare, blur): neither proof of a violation nor a match.
+        diff = word_diff(CANONICAL_WORDS, found_words)
+        wording_status = Status.NEEDS_REVIEW
+        wording_reason = ("Part of the warning could not be read (marked as illegible by the reader). "
+                          "Compare the warning by eye or request a clearer image.")
+    elif found_words == CANONICAL_WORDS:
         wording_status, wording_reason = Status.PASS, "Wording matches the required text word for word."
     else:
         diff = word_diff(CANONICAL_WORDS, found_words)
@@ -196,6 +205,7 @@ def check_warning(
         elif not whole_word_change and punctuation_only and edits <= t.warning_noise_max_edits:
             # Readers often confuse "," and "." on small or blurred print, even when confident.
             wording_status = Status.NEEDS_REVIEW
+            punctuation_noise = True
             wording_reason = (f"Only punctuation differs ({_describe_diff(diff).split(': ', 1)[1].rstrip('.')}). "
                               "This is often a reading error on small print. Compare the warning by eye.")
         elif not whole_word_change and edits <= t.warning_noise_max_edits and low_conf(affected, unknown_is_unsure=True):
@@ -269,6 +279,10 @@ def check_warning(
         overall, reason = Status.PASS, "Warning text is word for word correct, heading in capitals and bold, body not bold."
 
     extra = {"heading_body_weight_ratio": weight_ratio} if weight_ratio is not None else {}
+    if punctuation_noise:
+        extra["punctuation_only"] = True
+    if illegible:
+        extra["illegible"] = True
     return result(overall, reason, "exact wording, capitals, bold (27 CFR 16.21-16.22)", found_text, diff=diff, **extra)
 
 

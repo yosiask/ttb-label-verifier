@@ -88,13 +88,18 @@ def test_planned_setup_is_ready_and_read_only():
     assert not any(w in " ".join(c) for c in az.calls for w in ("create", "update", "build", "set", "delete"))
 
 
-def test_30k_tpm_flagged_and_cloud_paced_inside_quota():
+def test_low_quota_flagged():
+    w = copy.deepcopy(WORLD)
+    w[("cognitiveservices", "account", "deployment", "list")][0]["sku"]["capacity"] = 10
+    assert levels(ad.check(FakeAz(w), RG))["Model quota"] == "WARN"
+
+
+def test_30k_tpm_cloud_paced_inside_quota():
     plan = ad.check(FakeAz(), RG)
-    assert levels(plan)["Model quota"] == "WARN"
     env = ad.app_settings(plan, ad.DEFAULT_TOKENS_PER_LABEL)
-    # 30K TPM x 0.8 / 4500 tokens = 5.3 labels/min in total -> 2 per replica x 2 replicas.
-    assert env["CLOUD_REQUESTS_PER_MINUTE"] == "2"
-    assert int(env["CLOUD_REQUESTS_PER_MINUTE"]) * plan.max_replicas * 4500 <= 30_000
+    # 30K TPM x 0.8 / 1300 tokens = 18.5 labels/min in total -> 9 per replica x 2 replicas.
+    assert env["CLOUD_REQUESTS_PER_MINUTE"] == "9"
+    assert int(env["CLOUD_REQUESTS_PER_MINUTE"]) * plan.max_replicas * 1300 <= 30_000
 
 
 def test_settings_follow_existing_infrastructure():
@@ -203,7 +208,7 @@ def test_deploy_without_confirm_changes_nothing(monkeypatch, capsys):
     monkeypatch.setattr(ad.subprocess, "run", lambda *a, **k: pytest.fail("no subprocess without --confirm"))
     assert ad.main(["deploy", "-g", RG]) == 0
     out = capsys.readouterr().out
-    assert "Dry run" in out and "CLOUD_REQUESTS_PER_MINUTE=2" in out
+    assert "Dry run" in out and "CLOUD_REQUESTS_PER_MINUTE=9" in out
     assert not any("update" in c for c in az.calls)
 
 

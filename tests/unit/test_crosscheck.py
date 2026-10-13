@@ -9,7 +9,7 @@ from app.core.extractors.base import ProviderUnavailableError
 from app.core.extractors.crosscheck import CrossCheckedExtractor
 from app.core.models import Status
 from app.core.warning import CANONICAL_WARNING
-from tests.conftest import FakeExtractor, make_label
+from tests.conftest import LABEL_TEXT, FakeExtractor, make_label
 
 ALTERED = CANONICAL_WARNING.replace("cause health", "cause serious health")
 
@@ -119,4 +119,19 @@ def test_unreadable_ocr_does_not_override(application):
 def test_vision_small_letter_difference_is_review(application):
     """No per-word confidence from vision: a few letters off could be a misread."""
     label = vision(warning=CANONICAL_WARNING.replace("pregnancy", "pregnancey"))
+    assert warning_check(application, label).status == Status.NEEDS_REVIEW
+
+
+def test_ocr_punctuation_noise_does_not_override_exact_cloud_reading(application):
+    noisy = CANONICAL_WARNING.replace("machinery,", "machinery.")
+    label = vision().model_copy(update={"cross_check": make_label(warning=noisy, warning_weight_ratio=1.8)})
+    assert warning_check(application, label).status == Status.PASS
+
+
+def test_ocr_letter_doubt_does_override_exact_cloud_reading(application):
+    """A cloud reader that 'corrected' one letter must not pass when OCR saw it differently."""
+    one_letter = CANONICAL_WARNING.replace("women", "woman")
+    ocr = make_label(warning=one_letter, warning_weight_ratio=1.8,
+                     word_confidences=[(w, 40.0 if w == "woman" else 95.0) for w in (LABEL_TEXT + " " + one_letter).split()])
+    label = vision().model_copy(update={"cross_check": ocr})
     assert warning_check(application, label).status == Status.NEEDS_REVIEW

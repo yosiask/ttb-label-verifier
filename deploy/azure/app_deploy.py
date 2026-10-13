@@ -47,10 +47,11 @@ OPENAI_ROLES_BROADER = {"Cognitive Services OpenAI Contributor", "Cognitive Serv
 ACR_ROLES_LEAST = {"AcrPull", "Container Registry Repository Reader"}
 ACR_ROLES_BROADER = {"AcrPush", "Contributor", "Owner", "Container Registry Repository Writer"}
 
-# Tokens Azure counts against tokens-per-minute for one label: measured prompt ~1.8K (image and
-# instructions) plus the max_tokens output budget (700). Azure's estimate is approximate;
-# recalibrate from the ratelimit_remaining_tokens the app reports (scripts/run_accuracy.py rows).
-DEFAULT_TOKENS_PER_LABEL = 4500
+# Tokens Azure counts against tokens-per-minute for one label. Measured on the deployed app
+# (2026-10-13): x-ratelimit-remaining-tokens fell by 1,291 per call (billed prompt ~1,860 +
+# completion ~250; Azure's rate-limit estimate is its own). Rounded up; recalibrate from the
+# ratelimit_remaining_tokens the app reports in token_usage.
+DEFAULT_TOKENS_PER_LABEL = 1300
 QUOTA_HEADROOM = 0.8  # pace below the limit: Azure checks in 1-10 s windows, not per minute
 
 APP_SETTINGS = {

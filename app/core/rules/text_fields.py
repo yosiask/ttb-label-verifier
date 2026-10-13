@@ -160,7 +160,8 @@ def match_text_field(
         return Status.NEEDS_REVIEW, (f"{lead}, but the spelling is not the same ({what}). "
                                      "This may be a reading error or a real difference. Compare by eye.")
 
-    # Vision provider: compare against the field it read; a disagreeing full-text hit is never a Pass.
+    # Vision provider: compare against the field it read; a disagreeing full-text hit is never a Pass
+    # (a reading that is only part of the value, completed word for word on the label, is not disagreeing).
     if extracted_value is not None:
         found = clean(extracted_value)
         sc = _score(kind, expected, normalize(extracted_value))
@@ -174,6 +175,13 @@ def match_text_field(
             status, reason = near_miss(found, sc)
         elif low_confidence:
             status, reason = Status.NEEDS_REVIEW, f"The {name} could not be confirmed; the image is hard to read."
+        elif (best and best[0].exact and best[0].coverage >= t.line_coverage_min
+              and f" {normalize(extracted_value)} " in f" {expected} "):
+            # The reader gave only part of a name printed over two lines ("OLD TOM" / "DISTILLERY");
+            # the whole application value is on the label, word for word.
+            status = Status.PASS
+            reason = f"The {name} matches the application (printed over more than one line)."
+            found = best[1].text
         elif best and best[0].exact:
             status, reason = Status.NEEDS_REVIEW, f"The label's {name} reads \"{found}\", but the application value also appears elsewhere on the label. Compare by eye."
         else:

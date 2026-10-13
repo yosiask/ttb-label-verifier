@@ -109,7 +109,9 @@ def cross_check_warning(primary: FieldCheck, second: ExtractedLabel | None, t: T
     summary = {"status": other.status.value, "reason": other.reason, "found": other.found,
                "diff": other.details.get("diff", [])}
     primary.details["cross_check"] = summary
-    o_unsure = not o_ok and not o_fail  # e.g. OCR letter noise: cannot confirm the cloud's exact reading
+    # OCR unsure of letters cannot confirm the cloud's exact reading. OCR unsure only of
+    # punctuation (commas read as periods on small print, very common) does not override it.
+    o_unsure = not o_ok and not o_fail and not other.details.get("punctuation_only")
     if p_ok and (o_fail or o_unsure):
         primary.status = Status.FAIL if bold_fail else Status.NEEDS_REVIEW
         primary.reason = ("The cloud reader saw the required wording, but the offline reader saw differences: "

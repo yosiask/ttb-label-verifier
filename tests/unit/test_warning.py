@@ -157,3 +157,10 @@ def test_ocr_spacing_merges_are_not_wording_changes():
 def test_resplitting_never_hides_a_letter_change():
     text = CANONICAL_WARNING.replace("of the risk", "ofthe rlsk")
     assert check(text, confidences=conf(text)).status == Status.FAIL
+
+
+@pytest.mark.parametrize("marker", ["[illegible]", "...", "…"])
+def test_illegible_part_is_review_not_fail(marker):
+    text = CANONICAL_WARNING.replace("risk of birth defects. (2) Consumption", f"ris{marker} consumption")
+    r = check_warning(text, True, False, [], False, reader_sees_bold=True, weight_ratio=1.8)
+    assert r.status == Status.NEEDS_REVIEW and "could not be read" in r.reason

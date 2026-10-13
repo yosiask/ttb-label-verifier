@@ -47,7 +47,8 @@ SYSTEM_PROMPT = """You transcribe alcohol beverage labels for a compliance revie
 Report exactly what is printed. Do not correct spelling, capitalization, punctuation or wording,
 even when you recognize standard text such as the government health warning: if the label says
 something different from the standard wording, transcribe what the label says.
-Do not guess text you cannot read; use null for anything not present or not legible.
+Do not guess text you cannot read: write [illegible] in place of any word you cannot read,
+and use null for a field that is not present or not legible at all.
 You are not told what the label should say, and you must not judge compliance."""
 
 USER_PROMPT = """Transcribe this label.

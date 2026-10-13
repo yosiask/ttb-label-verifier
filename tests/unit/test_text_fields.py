@@ -153,3 +153,15 @@ def test_vision_field_one_letter_off_is_review():
 
 def test_country_misspelling_is_review():
     assert country("Scotland", "GLEN X\nProduct of Scotlnd").status == Status.NEEDS_REVIEW
+
+
+def test_vision_partial_brand_completed_on_label_passes():
+    """Brand printed over two lines: the reader gave "OLD TOM", the label has the whole name."""
+    r = brand("OLD TOM DISTILLERY", "OLD TOM\nDISTILLERY\nKentucky Straight Bourbon Whiskey", extracted="OLD TOM")
+    assert r.status == Status.PASS
+
+
+def test_vision_different_brand_with_app_value_elsewhere_is_still_review():
+    text = "RIVER BEND\nBottled by Stone's Throw Distillery, Frankfort, Kentucky"
+    r = brand("STONE'S THROW", text, extracted="RIVER BEND")
+    assert r.status != Status.PASS
