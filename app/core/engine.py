@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .config import THRESHOLDS, Thresholds
 from .extractors.base import LabelExtractor
 from .label_text import LabelText
-from .models import ApplicationData, ExtractedLabel, FieldCheck, Status, VerificationResult
+from .models import ApplicationData, ExtractedLabel, FieldCheck, ImageQuality, Status, VerificationResult
 from .preprocess import load_image
 from .quality import BLUR_BELOW, assess_quality, too_small_to_read
 from .rules.abv import check_alcohol
@@ -23,6 +24,10 @@ NOT_CHECKED = [
 ]
 
 UNREADABLE_MESSAGE = "We couldn't read this label clearly. Request a better image."
+MAX_IMAGES = 4  # front, back, neck, side
+
+# Each label image is read in its own worker; each of those may run two readers (cross-check).
+_IMAGE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="panel")
 
 
 def _overall(checks: list[FieldCheck]) -> Status:
@@ -104,7 +109,8 @@ def cross_check_warning(primary: FieldCheck, second: ExtractedLabel | None, t: T
     summary = {"status": other.status.value, "reason": other.reason, "found": other.found,
                "diff": other.details.get("diff", [])}
     primary.details["cross_check"] = summary
-    if p_ok and o_fail:
+    o_unsure = not o_ok and not o_fail  # e.g. OCR letter noise: cannot confirm the cloud's exact reading
+    if p_ok and (o_fail or o_unsure):
         primary.status = Status.FAIL if bold_fail else Status.NEEDS_REVIEW
         primary.reason = ("The cloud reader saw the required wording, but the offline reader saw differences: "
                           f"{other.reason} Compare the warning by eye.")
@@ -119,21 +125,112 @@ def cross_check_warning(primary: FieldCheck, second: ExtractedLabel | None, t: T
     return primary
 
 
-def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExtractor,
-           t: Thresholds = THRESHOLDS) -> VerificationResult:
+def merge_readings(readings: list[ExtractedLabel]) -> ExtractedLabel:
+    """Combine the readings of several images of one label (front, back, ...) into one.
+
+    Text from every image is searched. The warning, its bold judgment and its pixel weight
+    come from one image: the one where the warning was read (the longest warning text), so a
+    cross-check always compares the same panel. Readability is the weakest image's: a label
+    is only as verified as its hardest-to-read panel.
+    """
+    if len(readings) == 1:
+        return readings[0]
+    w = max(range(len(readings)), key=lambda i: len(readings[i].warning_text or ""))
+    panel = readings[w]
+    fields: dict[str, str | None] = {}
+    for r in readings:
+        for k, v in r.fields.items():
+            if fields.get(k) is None:
+                fields[k] = v
+    cross = [r.cross_check for r in readings]
+    merged_cross = None
+    if panel.cross_check is not None:
+        present = [c for c in cross if c is not None]
+        merged_cross = merge_readings(present).model_copy(update={
+            "warning_text": panel.cross_check.warning_text,
+            "warning_weight_ratio": panel.cross_check.warning_weight_ratio,
+            "confidence": panel.cross_check.confidence,
+        }) if len(present) > 1 else panel.cross_check
+    usage: dict[str, int] = {}
+    for r in readings:
+        for k, v in (r.token_usage or {}).items():
+            # Billed tokens add up; rate-limit headroom is the lowest seen.
+            usage[k] = min(usage.get(k, v), v) if k.startswith("ratelimit_") else usage.get(k, 0) + v
+    notes = [f"image {i + 1}: {n}" for i, r in enumerate(readings) for n in r.notes]
+    fallbacks = [f"Image {i + 1}: {r.fallback_reason}" for i, r in enumerate(readings) if r.fallback_reason]
+    providers = {r.provider for r in readings}
+    return ExtractedLabel(
+        provider=providers.pop() if len(providers) == 1 else panel.provider,
+        full_text="\n".join(r.full_text for r in readings),
+        fields=fields,
+        warning_text=panel.warning_text,
+        warning_heading_bold=panel.warning_heading_bold,
+        warning_body_bold=panel.warning_body_bold,
+        confidence=min(r.confidence for r in readings),
+        word_confidences=[wc for r in readings for wc in r.word_confidences],
+        extraction_ms=max(r.extraction_ms for r in readings),
+        preprocess_ms=max(r.preprocess_ms for r in readings),
+        notes=notes,
+        cross_check=merged_cross,
+        fallback_reason=" ".join(fallbacks) or None,
+        warning_weight_ratio=panel.warning_weight_ratio,
+        token_usage=usage or None,
+    )
+
+
+PARTIAL_LABEL_REASON = ("Not found on the uploaded image{s}. It may be on a side of the label that was not "
+                        "uploaded (for example the back label). Upload every side, or, if {these} show{verb} the "
+                        "whole label, tick \"These images show every side of the label\".")
+
+
+def soften_absences(checks: list[FieldCheck], n_images: int) -> None:
+    """When the uploaded images may not show every side of the label, something missing is
+    not proof of a violation: it may be on the back. Absent → Needs review; a statement that
+    is present but wrong is still Fail."""
+    for c in checks:
+        if c.status == Status.FAIL and (c.found is None or c.details.get("absent")):
+            c.details["status_if_all_sides"] = c.status.value
+            c.status = Status.NEEDS_REVIEW
+            c.reason = PARTIAL_LABEL_REASON.format(s="s" if n_images > 1 else "", these="these" if n_images > 1 else "it",
+                                                   verb="" if n_images > 1 else "s")
+
+
+def _read_one(data: bytes, extractor: LabelExtractor) -> tuple[ExtractedLabel, ImageQuality, int]:
     t0 = time.perf_counter()
-    image = load_image(image_bytes)
+    image = load_image(data)
     quality = assess_quality(image)
-    t1 = time.perf_counter()
+    decode_ms = int((time.perf_counter() - t0) * 1000)
     extracted = extractor.extract(image)
-    t2 = time.perf_counter()
     if extracted.cross_check is not None and quality.sharpness < BLUR_BELOW:
         # Blur thickens every stroke alike, so the weight measurement says nothing on a blurry photo.
         extracted = extracted.model_copy(update={
             "cross_check": extracted.cross_check.model_copy(update={"warning_weight_ratio": None})})
+    if too_small_to_read(quality):
+        extracted = extracted.model_copy(update={"confidence": 0.0})
+    return extracted, quality, decode_ms
+
+
+def verify(images: bytes | list[bytes], application: ApplicationData, extractor: LabelExtractor,
+           t: Thresholds = THRESHOLDS, all_sides: bool = True) -> VerificationResult:
+    """Check one label, given one or more images of it (front, back, ...).
+
+    all_sides: the images show every side of the label, so anything not found is missing
+    from the label (Fail). When False, absences are Needs review.
+    """
+    images = [images] if isinstance(images, bytes) else list(images)
+    t0 = time.perf_counter()
+    if len(images) == 1:
+        results = [_read_one(images[0], extractor)]
+    else:
+        futures = [_IMAGE_POOL.submit(_read_one, d, extractor) for d in images]
+        results = [f.result() for f in futures]  # the first error (e.g. an unreadable file) is raised
+    readings = [r[0] for r in results]
+    qualities = [r[1] for r in results]
+    extracted = merge_readings(readings)
+    t2 = time.perf_counter()
     checks, readable = evaluate(application, extracted, t)
-    if readable and too_small_to_read(quality):
-        checks, readable = evaluate(application, extracted.model_copy(update={"confidence": 0.0}), t)
+    if not all_sides:
+        soften_absences(checks, len(images))
     t3 = time.perf_counter()
 
     overall = _overall(checks)
@@ -145,11 +242,13 @@ def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExt
         notes.insert(0, UNREADABLE_MESSAGE)
     if extracted.notes:
         notes.append("Reader notes: " + "; ".join(extracted.notes) + ".")
-    if quality.issues:
-        notes.append(" ".join(quality.issues))
+    for i, q in enumerate(qualities):
+        if q.issues:
+            prefix = f"Image {i + 1}: " if len(qualities) > 1 else ""
+            notes.append(prefix + " ".join(q.issues))
 
     timings = {
-        "decode": int((t1 - t0) * 1000),
+        "decode": max(r[2] for r in results),
         "preprocess": extracted.preprocess_ms,
         "extract": extracted.extraction_ms,
         "rules": int((t3 - t2) * 1000),
@@ -157,6 +256,7 @@ def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExt
     }
     if extracted.cross_check:
         timings["cross_check"] = extracted.cross_check.extraction_ms + extracted.cross_check.preprocess_ms
+    worst = min(qualities, key=lambda q: (len(q.issues) == 0, q.sharpness))
     return VerificationResult(
         overall=overall,
         checks=checks,
@@ -164,7 +264,9 @@ def verify(image_bytes: bytes, application: ApplicationData, extractor: LabelExt
         image_readable=readable,
         provider=extracted.provider,
         message=" ".join(notes) or None,
-        image_quality=quality,
+        image_quality=worst,
+        image_count=len(images),
+        all_sides=all_sides,
         timings_ms=timings,
         token_usage=extracted.token_usage,
     )

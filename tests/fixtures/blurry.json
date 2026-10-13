@@ -41,5 +41,6 @@
   "degradation": [
     "blur",
     2.2
-  ]
+  ],
+  "all_sides": true
 }

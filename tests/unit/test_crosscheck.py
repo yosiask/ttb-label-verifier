@@ -84,9 +84,14 @@ def test_vision_hallucinated_warning_caught_when_ocr_finds_none(application):
 
 
 def test_agreeing_readers_pass(application):
-    label = vision().model_copy(update={"cross_check": make_label()})
+    label = vision().model_copy(update={"cross_check": make_label(warning_weight_ratio=1.8)})
     c = warning_check(application, label)
     assert c.status == Status.PASS and "readers_disagree" not in c.details
+
+
+def test_agreeing_text_but_unmeasured_bold_is_review(application):
+    label = vision().model_copy(update={"cross_check": make_label()})
+    assert warning_check(application, label).status == Status.NEEDS_REVIEW
 
 
 def test_agreeing_violation_fails(application):
@@ -106,7 +111,8 @@ def test_bold_failure_kept_even_when_readers_disagree(application):
 
 
 def test_unreadable_ocr_does_not_override(application):
-    label = vision().model_copy(update={"cross_check": make_label(warning=ALTERED, confidence=0.3)})
+    label = vision().model_copy(update={"cross_check": make_label(warning=ALTERED, confidence=0.3,
+                                                                    warning_weight_ratio=1.8)})
     assert warning_check(application, label).status == Status.PASS
 
 

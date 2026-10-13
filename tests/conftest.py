@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
+
 import pytest
+from PIL import Image, ImageDraw
 
 from app.core.models import ApplicationData, ExtractedLabel
 from app.core.warning import CANONICAL_WARNING
@@ -46,3 +49,14 @@ class FakeExtractor:
     def extract(self, image):
         self.seen_images += 1
         return self.label
+
+
+def text_png(color="white", size=(800, 600)) -> bytes:
+    """A small image with lines of dark text, so image-quality checks see a sharp photo."""
+    img = Image.new("RGB", size, color)
+    d = ImageDraw.Draw(img)
+    for y in range(30, size[1] - 30, 24):
+        d.text((20, y), "GOVERNMENT WARNING: (1) According to the Surgeon General", fill=(20, 20, 20))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()

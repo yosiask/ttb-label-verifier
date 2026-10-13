@@ -41,5 +41,6 @@
     }
   },
   "image": "proof_inconsistent.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

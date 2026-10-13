@@ -40,5 +40,6 @@
   "image": "low_res.png",
   "degradation": [
     "low_res"
-  ]
+  ],
+  "all_sides": true
 }

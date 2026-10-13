@@ -50,5 +50,6 @@
     }
   },
   "image": "warning_heading_not_bold.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

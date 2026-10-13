@@ -50,5 +50,6 @@
     }
   },
   "image": "brand_case_diff.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

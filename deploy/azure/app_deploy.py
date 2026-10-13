@@ -47,9 +47,9 @@ OPENAI_ROLES_BROADER = {"Cognitive Services OpenAI Contributor", "Cognitive Serv
 ACR_ROLES_LEAST = {"AcrPull", "Container Registry Repository Reader"}
 ACR_ROLES_BROADER = {"AcrPush", "Contributor", "Owner", "Container Registry Repository Writer"}
 
-# Tokens Azure counts against tokens-per-minute for one label: about 2.5K for the image at
-# 1600 px, about 0.6K of instructions and the max_tokens output budget (1000). Azure's estimate
-# is approximate; recalibrate from the x-ratelimit-* response headers after the first real calls.
+# Tokens Azure counts against tokens-per-minute for one label: measured prompt ~1.8K (image and
+# instructions) plus the max_tokens output budget (700). Azure's estimate is approximate;
+# recalibrate from the ratelimit_remaining_tokens the app reports (scripts/run_accuracy.py rows).
 DEFAULT_TOKENS_PER_LABEL = 4500
 QUOTA_HEADROOM = 0.8  # pace below the limit: Azure checks in 1-10 s windows, not per minute
 
@@ -60,7 +60,8 @@ APP_SETTINGS = {
     "RATE_LIMIT_PER_MINUTE": "120",
     "TRUSTED_PROXY_HOPS": "1",  # Container Apps ingress appends the client address
     "AZURE_TIMEOUT_S": "8",
-    "AZURE_MAX_OUTPUT_TOKENS": "1000",
+    "AZURE_MAX_OUTPUT_TOKENS": "700",
+    "CLOUD_WAIT_S": "45",  # batch requests wait this long for a cloud slot before using offline OCR
     "VISION_OCR_CROSSCHECK": "true",
 }
 

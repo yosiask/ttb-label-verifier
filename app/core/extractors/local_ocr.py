@@ -100,12 +100,16 @@ class LocalOcrExtractor:
 
         flat = [(w, c) for line in lines for w, c, _ in line]
         boxes = [b for line in lines for _, _, b in line]
+        line_of = [i for i, line in enumerate(lines) for _ in line]
         words = [w for w, _ in flat]
         span = find_warning(words)
         warning_text = " ".join(words[span[0]:span[1] + 1]) if span else None
         ratio = None
         if span and _key(words[span[0]]) == "GOVERNMENT" and span[1] - span[0] > 8:
-            ratio = heading_weight_ratio(gray, boxes[span[0]:span[0] + 2], boxes[span[0] + 2:span[1] + 1])
+            # Body words on the heading's own printed line: same size, focus and curvature.
+            s0 = span[0]
+            same_line = [boxes[j] for j in range(s0 + 2, span[1] + 1) if line_of[j] == line_of[s0]]
+            ratio = heading_weight_ratio(gray, boxes[s0:s0 + 2], same_line)
         return ExtractedLabel(
             provider="local_ocr",
             full_text="\n".join(" ".join(w for w, _, _ in line) for line in lines),

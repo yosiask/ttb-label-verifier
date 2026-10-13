@@ -38,6 +38,18 @@ class FakeCompletions:
         return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason=self.finish_reason)],
                                usage=self.usage)
 
+    @property
+    def with_raw_response(self):
+        outer = self
+
+        class Raw:
+            def create(self, **kwargs):
+                resp = outer.create(**kwargs)
+                return SimpleNamespace(parse=lambda: resp, headers=outer.headers)
+        return Raw()
+
+    headers: dict = {}
+
 
 def extractor(**kw):
     comp = FakeCompletions(**kw)
@@ -144,7 +156,7 @@ def test_output_budget_is_small_and_configurable(monkeypatch):
     largest expected reading instead of a generous ceiling."""
     ex, comp = extractor(content=json.dumps(READING))
     ex.extract(img())
-    assert comp.calls[0]["max_tokens"] == 1000
+    assert comp.calls[0]["max_tokens"] == 700
     monkeypatch.setenv("AZURE_MAX_OUTPUT_TOKENS", "700")
     ex, comp = extractor(content=json.dumps(READING))
     ex.extract(img())
@@ -201,3 +213,11 @@ def test_token_usage_reported_for_cost_tracking():
     assert ex.extract(img()).token_usage == {"prompt_tokens": 2900, "completion_tokens": 410}
     ex, _ = extractor(content=json.dumps(READING))
     assert ex.extract(img()).token_usage is None
+
+
+def test_rate_limit_headroom_reported_for_calibration():
+    ex, comp = extractor(content=json.dumps(READING), usage=SimpleNamespace(prompt_tokens=1800, completion_tokens=240))
+    comp.headers = {"x-ratelimit-remaining-tokens": "147200", "x-ratelimit-remaining-requests": "149"}
+    u = ex.extract(img()).token_usage
+    assert u == {"prompt_tokens": 1800, "completion_tokens": 240,
+                 "ratelimit_remaining_tokens": 147200, "ratelimit_remaining_requests": 149}

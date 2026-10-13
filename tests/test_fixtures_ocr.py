@@ -37,7 +37,8 @@ def test_fixture_local_ocr(case):
     ctype = "image/jpeg" if image.endswith(".jpg") else "image/png"
     with open(FIXTURES / image, "rb") as f:
         r = client.post("/api/verify", files={"image": (image, f, ctype)},
-                        data={"application": json.dumps(meta["application"]), "provider": "local"})
+                        data={"application": json.dumps(meta["application"]), "provider": "local",
+                              "all_sides": str(meta.get("all_sides", False)).lower()})
     assert r.status_code == 200, r.text
     body = r.json()
     got = {c["field"]: c["status"] for c in body["checks"]}

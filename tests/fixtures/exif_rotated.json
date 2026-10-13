@@ -52,5 +52,6 @@
   "image": "exif_rotated.jpg",
   "degradation": [
     "exif"
-  ]
+  ],
+  "all_sides": true
 }

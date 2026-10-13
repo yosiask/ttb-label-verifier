@@ -41,5 +41,6 @@
   "degradation": [
     "tilt",
     10
-  ]
+  ],
+  "all_sides": true
 }

@@ -31,16 +31,38 @@ def stroke_width(gray: np.ndarray, box: Box) -> float | None:
 
 
 def heading_weight_ratio(gray: np.ndarray, heading: list[Box], body: list[Box],
-                         height_ratio_range: tuple[float, float] = (0.7, 1.4)) -> float | None:
-    """Heading stroke / median body stroke, or None when it cannot be measured fairly
-    (missing words, or heading and body set at clearly different sizes)."""
-    if not heading or len(body) < 5:
+                         target_height: int = 48) -> float | None:
+    """Heading stroke / median body stroke, or None when it cannot be measured fairly.
+
+    heading and body should be words from the same printed line (same size, focus and
+    curvature). All are measured within one vertical band, the line's, because OCR word
+    boxes can disagree about height, and small text is enlarged to a standard line height
+    first so the strokes span enough pixels to measure.
+    """
+    if not heading or len(body) < 3:
         return None
-    hs = [s for s in (stroke_width(gray, b) for b in heading) if s]
-    bs = [s for s in (stroke_width(gray, b) for b in body) if s]
-    if not hs or len(bs) < 5:
+    top = min(b[1] for b in heading + body)
+    bottom = max(b[1] + b[3] for b in heading + body)
+    line_h = bottom - top
+    if line_h < 6:
         return None
-    size = float(np.median([b[3] for b in heading])) / float(np.median([b[3] for b in body]))
-    if not height_ratio_range[0] <= size <= height_ratio_range[1]:
+    scale = min(4.0, max(1.0, target_height / line_h))
+
+    def measure(box: Box) -> float | None:
+        left, _, w, _ = box
+        y0, y1 = max(0, top - 2), bottom + 2
+        crop = gray[y0:y1, max(0, left - 2):left + w + 2]
+        if crop.size == 0:
+            return None
+        if scale > 1:
+            crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        sw = stroke_width(crop, (0, 0, crop.shape[1], crop.shape[0]))
+        return sw / scale if sw else None
+
+    left = min(b[0] for b in heading)
+    right = max(b[0] + b[2] for b in heading)
+    hs = measure((left, top, right - left, line_h))
+    bs = [s for s in (measure(b) for b in body) if s]
+    if not hs or len(bs) < 3:
         return None
-    return round(float(np.mean(hs)) / float(np.median(bs)), 3)
+    return round(hs / float(np.median(bs)), 3)

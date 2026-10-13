@@ -39,5 +39,6 @@
   "image": "blank_or_unreadable.png",
   "degradation": [
     "blank"
-  ]
+  ],
+  "all_sides": true
 }

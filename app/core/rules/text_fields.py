@@ -203,6 +203,7 @@ def match_text_field(
     else:
         status = Status.FAIL
         reason = f"The application's {name} was not found on the label (closest text: \"{span.text}\")."
+        details["absent"] = True  # nothing like it anywhere: may be on a side that was not uploaded
     found = span.text if (sc.score >= review_at or status == Status.FAIL) else None
     return TextMatch(FieldCheck(field=field, status=status, expected=expected_raw, found=found,
                                 rule=rule, reason=reason, details=details), span, sc.coverage)

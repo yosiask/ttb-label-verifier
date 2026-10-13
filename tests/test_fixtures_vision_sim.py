@@ -56,7 +56,7 @@ def run(case: str, autocorrect: bool = False):
     meta = json.loads((FIXTURES / f"{case}.json").read_text())
     ex = CrossCheckedExtractor(SimulatedVision(meta, autocorrect), LocalOcrExtractor(), allow_fallback=True)
     image = (FIXTURES / meta["image"]).read_bytes()
-    return meta, verify(image, ApplicationData(**meta["application"]), ex)
+    return meta, verify(image, ApplicationData(**meta["application"]), ex, all_sides=meta.get("all_sides", False))
 
 
 def as_list(v):

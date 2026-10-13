@@ -10,9 +10,15 @@
   <header class="site-header">
     <h1>Alcohol Label Verifier</h1>
     <p class="tagline">Upload a label image, enter what the application says, and get a field-by-field check.</p>
+    <div class="tabs" role="tablist" aria-label="Mode">
+      <button type="button" role="tab" id="tab-single" aria-selected="true" aria-controls="single-panel">Check one label</button>
+      <button type="button" role="tab" id="tab-batch" aria-selected="false" aria-controls="batch-panel" tabindex="-1">Check a batch</button>
+    </div>
   </header>
 
   <main>
+    <!-- ================================================================ single -->
+    <div id="single-panel" role="tabpanel" aria-labelledby="tab-single">
     <section class="panel" aria-labelledby="single-heading">
       <h2 id="single-heading" class="visually-hidden">Check one label</h2>
 
@@ -31,39 +37,52 @@
       <form id="verify-form" novalidate>
         <div class="columns">
           <div class="col">
-            <h3>1. Label image</h3>
+            <h3>1. Label images</h3>
             <label id="drop-zone" class="drop-zone" for="image-input" tabindex="0">
-              <span id="drop-text">Drag the label image here, or <u>click to choose a file</u>.<br>
-                <small>JPEG, PNG or WebP, up to 10 MB.</small></span>
-              <img id="preview" alt="Preview of the selected label" hidden>
+              <span id="drop-text">Drag the label image here, or <u>click to choose files</u>.<br>
+                <small>Add the back label too if it has the warning. JPEG, PNG or WebP, up to 10 MB each, up to 4 images.</small></span>
+              <img id="preview" alt="Preview of the first selected image" hidden>
             </label>
-            <input type="file" id="image-input" name="image" accept="image/jpeg,image/png,image/webp" class="visually-hidden">
+            <input type="file" id="image-input" name="image" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple class="visually-hidden">
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="visually-hidden">
+            <div class="image-actions">
+              <label for="camera-input" id="camera-button" class="button-like secondary" hidden>Take a photo</label>
+              <button type="button" id="add-image" class="secondary" hidden>Add another image</button>
+              <button type="button" id="clear-images" class="link-button" hidden>Remove all images</button>
+            </div>
+            <ul id="thumbs" class="thumbs" aria-label="Selected images"></ul>
             <p id="file-name" class="file-name" aria-live="polite"></p>
+            <div class="field checkbox-field all-sides">
+              <input type="checkbox" id="all_sides" name="all_sides">
+              <label for="all_sides">These images show every side of the label</label>
+            </div>
+            <p class="hint" id="all-sides-hint">Leave unticked if you only have the front. Anything not found is then
+              marked <strong>Needs review</strong> (it may be on the back), not Fail.</p>
           </div>
 
           <div class="col">
             <h3>2. What the application says</h3>
             <div class="field">
               <label for="brand_name">Brand name</label>
-              <input id="brand_name" name="brand_name" placeholder="e.g. OLD TOM DISTILLERY" required>
+              <input id="brand_name" name="brand_name" placeholder="e.g. OLD TOM DISTILLERY" required autocomplete="off">
             </div>
             <div class="field">
               <label for="class_type">Class / type</label>
-              <input id="class_type" name="class_type" placeholder="e.g. Kentucky Straight Bourbon Whiskey" required>
+              <input id="class_type" name="class_type" placeholder="e.g. Kentucky Straight Bourbon Whiskey" required autocomplete="off">
             </div>
             <div class="field-row">
               <div class="field">
                 <label for="alcohol_content">Alcohol content</label>
-                <input id="alcohol_content" name="alcohol_content" placeholder="e.g. 45% Alc./Vol. (90 Proof)" required>
+                <input id="alcohol_content" name="alcohol_content" placeholder="e.g. 45% Alc./Vol. (90 Proof)" required autocomplete="off">
               </div>
               <div class="field">
                 <label for="net_contents">Net contents</label>
-                <input id="net_contents" name="net_contents" placeholder="e.g. 750 mL" required>
+                <input id="net_contents" name="net_contents" placeholder="e.g. 750 mL" required autocomplete="off">
               </div>
             </div>
             <div class="field">
               <label for="producer_name_address">Producer name and address</label>
-              <input id="producer_name_address" name="producer_name_address" placeholder="e.g. Old Tom Distillery, Bardstown, Kentucky" required>
+              <input id="producer_name_address" name="producer_name_address" placeholder="e.g. Old Tom Distillery, Bardstown, Kentucky" required autocomplete="off">
             </div>
             <div class="field-row">
               <div class="field">
@@ -81,7 +100,7 @@
             </div>
             <div class="field" id="country-field" hidden>
               <label for="country_of_origin">Country of origin</label>
-              <input id="country_of_origin" name="country_of_origin" placeholder="e.g. Scotland">
+              <input id="country_of_origin" name="country_of_origin" placeholder="e.g. Scotland" autocomplete="off">
             </div>
             <div class="field">
               <label for="provider">Engine</label>
@@ -96,7 +115,7 @@
       </form>
     </section>
 
-    <section id="results" class="panel" aria-live="polite" hidden>
+    <section id="results" class="panel result-view" aria-live="polite" hidden>
       <div id="banner" class="banner"></div>
       <p id="result-message" class="result-message" hidden></p>
       <table class="checks">
@@ -111,6 +130,81 @@
         <ul id="not-checked-list"></ul>
       </div>
     </section>
+    </div>
+
+    <!-- ================================================================ batch -->
+    <div id="batch-panel" role="tabpanel" aria-labelledby="tab-batch" hidden>
+    <section class="panel" aria-labelledby="batch-heading">
+      <h2 id="batch-heading" class="visually-hidden">Check a batch</h2>
+      <div class="example-bar">
+        <span>New here?</span>
+        <button type="button" id="batch-sample" class="secondary">Load a sample batch (5 labels)</button>
+      </div>
+      <ol class="batch-steps">
+        <li>
+          <strong>Fill in the spreadsheet.</strong> <a href="batch-template.csv" download>Download the CSV template</a>.
+          One row per label. Put the image file name in <code>filename</code>; for a front and back label, list both
+          separated by <code>;</code> (for example <code>front.jpg;back.jpg</code>). Set <code>all_sides</code> to
+          <code>yes</code> when the images show every side of the label.
+        </li>
+        <li>
+          <strong>Choose the CSV and all the images</strong> (up to 500 labels).
+          <label id="batch-drop" class="drop-zone drop-zone-small" for="batch-files" tabindex="0">
+            <span>Drag the CSV and the images here, or <u>click to choose files</u>.</span>
+          </label>
+          <input type="file" id="batch-files" accept=".csv,text/csv,image/jpeg,image/png,image/webp" multiple class="visually-hidden">
+        </li>
+      </ol>
+      <div id="batch-summary" class="batch-summary" aria-live="polite" hidden></div>
+      <div id="batch-problems" class="problems" hidden></div>
+      <div class="field-row batch-controls">
+        <div class="field">
+          <label for="batch-provider">Engine</label>
+          <select id="batch-provider"></select>
+        </div>
+        <div class="field batch-buttons">
+          <button type="button" id="batch-start" class="primary" disabled>Check all labels</button>
+          <button type="button" id="batch-stop" class="secondary" hidden>Stop</button>
+        </div>
+      </div>
+      <div id="batch-error" class="error" role="alert" hidden></div>
+    </section>
+
+    <section id="batch-results" class="panel" hidden>
+      <div class="progress-row">
+        <progress id="batch-progress" value="0" max="1"></progress>
+        <p id="batch-progress-text" class="progress-text" aria-live="polite"></p>
+      </div>
+      <div id="batch-counts" class="counts"></div>
+      <div class="batch-actions">
+        <button type="button" id="batch-retry" class="secondary" hidden>Retry labels that could not be checked</button>
+        <button type="button" id="batch-export" class="secondary" disabled>Export results (CSV)</button>
+      </div>
+      <div class="table-scroll">
+        <table class="checks batch-table">
+          <caption class="visually-hidden">Batch results, problems first</caption>
+          <thead><tr><th scope="col">Result</th><th scope="col">Label</th><th scope="col">Brand</th><th scope="col">Needs attention</th><th scope="col">Time</th></tr></thead>
+          <tbody id="batch-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="batch-detail" class="panel result-view" aria-live="polite" hidden>
+      <div class="detail-head">
+        <h2 id="batch-detail-title" class="detail-title"></h2>
+        <button type="button" id="batch-detail-close" class="secondary">Back to the list</button>
+      </div>
+      <div class="banner"></div>
+      <p class="result-message" hidden></p>
+      <table class="checks">
+        <caption class="visually-hidden">Field-by-field results</caption>
+        <thead>
+          <tr><th scope="col">Result</th><th scope="col">Field</th><th scope="col">Application says</th><th scope="col">Label says</th><th scope="col">Why</th></tr>
+        </thead>
+        <tbody class="checks-body"></tbody>
+      </table>
+    </section>
+    </div>
   </main>
 
   <footer class="site-footer">

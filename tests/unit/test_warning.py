@@ -132,7 +132,7 @@ def test_unknown_bold_reason_names_the_cause():
 
 @pytest.mark.parametrize("hb,bb,ratio,status,phrase", [
     (True, False, 1.8, "pass", "confirmed by measuring"),
-    (True, False, None, "pass", "Heading is bold"),
+    (True, False, None, "needs_review", "could not be measured"),  # the reader's word alone is not enough
     (True, False, 1.0, "needs_review", "same weight"),       # the live false-pass case
     (True, False, 1.27, "needs_review", "clearly heavier"),  # unsure band
     (False, False, 1.0, "fail", "not in bold"),
@@ -147,3 +147,13 @@ def test_bold_needs_pixels_and_reader_to_agree(hb, bb, ratio, status, phrase):
     r = check_warning(W, hb, bb, [], False, reader_sees_bold=True, weight_ratio=ratio)
     assert r.status.value == status
     assert phrase in r.reason or phrase in r.details["steps"][-1]["reason"], r.reason
+
+
+def test_ocr_spacing_merges_are_not_wording_changes():
+    text = CANONICAL_WARNING.replace("of the risk", "ofthe risk").replace("defects. (2)", "defects.(2)")
+    assert check(text, confidences=conf(text)).status != Status.FAIL
+
+
+def test_resplitting_never_hides_a_letter_change():
+    text = CANONICAL_WARNING.replace("of the risk", "ofthe rlsk")
+    assert check(text, confidences=conf(text)).status == Status.FAIL

@@ -64,6 +64,25 @@ def _tokens_with_confidence(
     return _rejoin_tokens([(w, None) for w in raw])
 
 
+def _resplit_ocr_merges(tokens: list[tuple[str, float | None]]) -> list[tuple[str, float | None]]:
+    """Offline OCR drops spaces on small print ("ofthe", "defects.(2)"). Where a token is
+    exactly two or three consecutive words of the required text run together, split it
+    back. Only spacing changes: every letter and punctuation mark must match, so this can
+    never hide a changed, added or missing word."""
+    out: list[tuple[str, float | None]] = []
+    for word, conf in tokens:
+        split = None
+        for n in (2, 3):
+            for i in range(len(CANONICAL_WORDS) - n + 1):
+                if "".join(CANONICAL_WORDS[i:i + n]) == word:
+                    split = CANONICAL_WORDS[i:i + n]
+                    break
+            if split:
+                break
+        out.extend((w, conf) for w in split) if split else out.append((word, conf))
+    return out
+
+
 def word_diff(expected: list[str], found: list[str]) -> list[dict]:
     """Word-level diff for the UI: equal / missing / extra / changed segments."""
     ops = []
@@ -91,7 +110,8 @@ def check_warning(
     weight_ratio: float | None = None,
 ) -> FieldCheck:
     """weight_ratio: heading/body stroke weight measured from pixels by offline OCR (stroke.py),
-    an independent check on the reader's bold judgment. None when not measured."""
+    an independent check on the reader's bold judgment. None when not measured. A reader that
+    sees bold (cloud vision) passes the bold rule only when the measurement confirms it."""
     steps: list[dict] = []
 
     def result(status: Status, reason: str, rule: str, found: str | None, **extra) -> FieldCheck:
@@ -114,6 +134,8 @@ def check_warning(
     steps.append({"step": "present", "status": Status.PASS.value, "reason": "Warning statement found."})
 
     tokens = _tokens_with_confidence(warning_text, word_confidences)
+    if word_confidences:
+        tokens = _resplit_ocr_merges(tokens)
     found_words = [w for w, _ in tokens]
     found_text = " ".join(found_words)
     statuses: list[Status] = []
@@ -219,6 +241,12 @@ def check_warning(
         bold_reason = ("The reader reported the heading bold and the body regular, but the heading's strokes "
                        + ("measure the same weight as the body's. " if same else
                           "do not measure clearly heavier than the body's. ") + confirm)
+    elif weight_ratio is None and reader_sees_bold:
+        # Live testing: the vision model reported textbook formatting on a regular-weight heading and
+        # on an all-bold warning. Its word alone is not enough to pass the bold requirement.
+        bold_status, bold_measured_conflict = Status.NEEDS_REVIEW, True
+        bold_reason = ("The reader reported the heading bold and the body regular, but the type weight could "
+                       "not be measured on this image to confirm it. " + confirm)
     else:
         bold_status = Status.PASS
         bold_reason = "Heading is bold and the rest is not" + (

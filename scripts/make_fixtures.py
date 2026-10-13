@@ -282,6 +282,7 @@ def main() -> None:
         meta = {k: v for k, v in c.items() if k not in ("post", "example")}
         meta["image"] = image_name
         meta["degradation"] = list(c["post"]) if c["post"] else None
+        meta["all_sides"] = True  # each image is the whole label
         (OUT / f"{c['case']}.json").write_text(json.dumps(meta, indent=2) + "\n")
         if c["example"]:
             shutil.copy(OUT / f"{c['case']}.png", EXAMPLES / f"{c['case']}.png")

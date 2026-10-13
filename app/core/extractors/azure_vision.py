@@ -39,7 +39,7 @@ MAX_LONG_EDGE = 1600
 API_VERSION = "2024-10-21"
 # Azure counts max_tokens against the deployment's tokens-per-minute limit on every request,
 # whatever the answer's real length, so keep it close to the largest expected reading.
-DEFAULT_MAX_OUTPUT_TOKENS = 1000
+DEFAULT_MAX_OUTPUT_TOKENS = 700  # largest measured reading: 257 tokens (2026-10-13)
 COOLDOWN_DEFAULT_S, COOLDOWN_MIN_S, COOLDOWN_MAX_S = 5.0, 1.0, 60.0
 RATE_LIMITED_MESSAGE = "The cloud AI engine is at its usage limit right now."
 
@@ -185,7 +185,7 @@ class AzureVisionExtractor:
         data_url = encode_image(image)
         t1 = time.perf_counter()
         try:
-            resp = self.client.chat.completions.create(
+            raw = self.client.chat.completions.with_raw_response.create(
                 model=self.deployment,
                 temperature=0,
                 max_tokens=self.max_output_tokens,
@@ -200,6 +200,10 @@ class AzureVisionExtractor:
                     ]},
                 ],
             )
+            resp = raw.parse()
+            limit_headers = {k: raw.headers.get(h) for k, h in (
+                ("ratelimit_remaining_tokens", "x-ratelimit-remaining-tokens"),
+                ("ratelimit_remaining_requests", "x-ratelimit-remaining-requests"))}
         except openai.APITimeoutError as e:
             raise ProviderTimeoutError(f"The cloud AI engine did not answer within {self.timeout_s:g} seconds.") from e
         except openai.RateLimitError as e:
@@ -220,7 +224,9 @@ class AzureVisionExtractor:
 
         usage = getattr(resp, "usage", None)
         token_usage = {k: int(getattr(usage, k)) for k in ("prompt_tokens", "completion_tokens")
-                       if isinstance(getattr(usage, k, None), int)} if usage else None
+                       if isinstance(getattr(usage, k, None), int)} if usage else {}
+        # Azure's own count against the per-minute quota, to calibrate CLOUD_REQUESTS_PER_MINUTE.
+        token_usage.update({k: int(v) for k, v in limit_headers.items() if v and str(v).isdigit()})
         notes = []
         if reading.legibility != "clear" and reading.legibility_note:
             notes.append(reading.legibility_note.strip().rstrip("."))

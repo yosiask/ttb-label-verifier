@@ -52,5 +52,6 @@
     }
   },
   "image": "import_country_ok.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

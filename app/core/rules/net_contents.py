@@ -17,6 +17,9 @@ _VOLUME = re.compile(
     re.IGNORECASE,
 )
 _KEYWORD = re.compile(r"\bml\b|\bcl\b|\blit(?:er|re)|\bfl\.?\s*oz|\bfluid ounce", re.IGNORECASE)
+# A short line ending in a volume unit whose number was misread ("1 L" read as "TL",
+# "12 FL. OZ." as "ae. OZ."): a statement is probably there, just not readable.
+_UNIT_FRAGMENT = re.compile(r"^\W*[\w.]{0,4}\W*(?:m?l|cl|oz|fl\.?\s*oz)\.?\W*$", re.IGNORECASE)
 
 RULE = "volume converted to mL, within 0.5%"
 
@@ -80,7 +83,8 @@ def check_net_contents(
     details = {"expected_ml": round(exp_ml, 2), "label_ml": [round(v, 2) for v, _ in found_vols]}
 
     if not found_vols:
-        if low_confidence or _KEYWORD.search(source or ""):
+        fragment = any(_UNIT_FRAGMENT.match(line.strip()) for line in (source or "").splitlines() if line.strip())
+        if low_confidence or fragment or _KEYWORD.search(source or ""):
             return fc(Status.NEEDS_REVIEW, None, "Could not read the net contents clearly. Check by eye.", **details)
         return fc(Status.FAIL, None, "No net contents statement was found on the label.", **details)
 

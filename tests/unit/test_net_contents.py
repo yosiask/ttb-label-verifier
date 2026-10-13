@@ -30,3 +30,14 @@ def test_missing():
     assert check_net_contents("750 mL", "OLD TOM\n45%", False).status == Status.FAIL
     assert check_net_contents("750 mL", "OLD TOM\n45%", True).status == Status.NEEDS_REVIEW
     assert check_net_contents("750 mL", "7S0 mL", False).status == Status.NEEDS_REVIEW
+
+
+@pytest.mark.parametrize("line", ["TL", "ae. OZ."])
+def test_unreadable_unit_fragment_is_review_not_fail(line):
+    r = check_net_contents("1 L", f"NORTHERN LIGHT\nVodka\n{line}\nDistilled by Northern Light", False)
+    assert r.status == Status.NEEDS_REVIEW
+
+
+def test_no_volume_at_all_still_fails():
+    r = check_net_contents("750 mL", "OLD TOM DISTILLERY\nBourbon Whiskey\nBardstown, Kentucky", False)
+    assert r.status.value == "fail"

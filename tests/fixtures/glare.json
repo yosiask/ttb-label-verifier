@@ -40,5 +40,6 @@
   "image": "glare.png",
   "degradation": [
     "glare"
-  ]
+  ],
+  "all_sides": true
 }

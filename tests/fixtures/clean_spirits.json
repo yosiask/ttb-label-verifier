@@ -50,5 +50,6 @@
     }
   },
   "image": "clean_spirits.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

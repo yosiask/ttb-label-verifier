@@ -41,5 +41,6 @@
     }
   },
   "image": "brand_one_letter_off.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

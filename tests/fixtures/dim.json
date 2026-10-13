@@ -40,5 +40,6 @@
   "image": "dim.png",
   "degradation": [
     "dim"
-  ]
+  ],
+  "all_sides": true
 }

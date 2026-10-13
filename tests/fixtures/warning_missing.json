@@ -41,5 +41,6 @@
     }
   },
   "image": "warning_missing.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

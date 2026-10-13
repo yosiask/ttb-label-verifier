@@ -41,5 +41,6 @@
     }
   },
   "image": "warning_title_case.png",
-  "degradation": null
+  "degradation": null,
+  "all_sides": true
 }

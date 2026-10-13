@@ -1,0 +1,49 @@
+{
+  "case": "scotch_import",
+  "description": "Imported scotch with \"Product of Scotland\".",
+  "truth": "compliant",
+  "simulated_photo": true,
+  "images": [
+    "scotch_import.jpg"
+  ],
+  "image": "scotch_import.jpg",
+  "all_sides": true,
+  "label": {
+    "brand": "GLEN ARDOCH",
+    "class_type": "Single Malt Scotch Whisky",
+    "alcohol": "43% Alc./Vol.",
+    "net": "750 mL",
+    "producer": "Imported by Highland Imports Ltd., New York, NY",
+    "country": "Product of Scotland",
+    "heading": "GOVERNMENT WARNING:",
+    "body": "(1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+    "heading_bold": true,
+    "body_bold": false,
+    "warning": true
+  },
+  "application": {
+    "brand_name": "GLEN ARDOCH",
+    "class_type": "Single Malt Scotch Whisky",
+    "alcohol_content": "43%",
+    "net_contents": "750 mL",
+    "producer_name_address": "Highland Imports Ltd., New York, NY",
+    "country_of_origin": "Scotland",
+    "is_import": true,
+    "beverage_type": "spirits"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "pass",
+        "needs_review"
+      ],
+      "fields": {}
+    },
+    "local_ocr": {
+      "overall": [
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

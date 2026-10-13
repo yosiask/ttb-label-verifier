@@ -8,7 +8,7 @@ from PIL import Image
 from app.api import protection, routes
 from app.api.main import app
 from app.core.extractors.factory import Selection
-from tests.conftest import FakeExtractor, make_label
+from tests.conftest import FakeExtractor, make_label, text_png
 
 client = TestClient(app)
 
@@ -22,9 +22,7 @@ APP = {
 
 
 def png() -> bytes:
-    buf = io.BytesIO()
-    Image.new("RGB", (800, 600), "white").save(buf, "PNG")
-    return buf.getvalue()
+    return text_png()
 
 
 @pytest.fixture(autouse=True)
@@ -151,7 +149,7 @@ def test_oversized_body_rejected_before_parsing(monkeypatch):
     monkeypatch.setenv("MAX_UPLOAD_MB", "1")
     called = []
     monkeypatch.setattr(routes, "get_extractor", lambda *a, **k: called.append(1))
-    r = post(image=b"x" * (3 * 1024 * 1024))
+    r = post(image=b"x" * (6 * 1024 * 1024))  # over 4 images x 1 MB + 1 MB: refused while streaming
     assert r.status_code == 413 and r.json()["error_code"] == "file_too_large"
     assert "larger than 1 MB" in r.json()["message"]  # the image limit, not the request limit
     assert not called
@@ -189,7 +187,7 @@ def test_auto_uses_cloud_until_daily_cap_then_offline(monkeypatch):
     monkeypatch.setenv("CLOUD_DAILY_CAP", "1")
     protection.reset_for_tests()
     cloud = CloudFake(make_label(provider="azure_vision", heading_bold=True, body_bold=False))
-    local = FakeExtractor(make_label())
+    local = FakeExtractor(make_label(warning_weight_ratio=1.8))  # the cross-check measured the bold heading
     monkeypatch.setattr(factory, "azure_extractor", lambda: cloud)
     monkeypatch.setattr(factory, "LocalOcrExtractor", lambda: local)
 
@@ -264,3 +262,75 @@ def test_cloud_cooldown_after_429_skips_cloud_without_using_cap(monkeypatch):
 
 def test_no_pacing_by_default():
     assert protection.reset_for_tests().cloud_pace is None
+
+
+def post_many(n, all_sides=None, provider=None):
+    files = [("image", (f"p{i}.png", png(), "image/png")) for i in range(n)]
+    data = {"application": json.dumps(APP)}
+    if all_sides is not None:
+        data["all_sides"] = all_sides
+    if provider:
+        data["provider"] = provider
+    return client.post("/api/verify", files=files, data=data)
+
+
+def test_several_images_of_one_label(fake):
+    r = post_many(2)
+    assert r.status_code == 200 and r.json()["image_count"] == 2
+    assert fake.seen_images == 2
+
+
+def test_at_most_four_images(fake):
+    r = post_many(5)
+    assert r.status_code == 422 and r.json()["error_code"] == "too_many_images"
+    assert fake.seen_images == 0
+
+
+def test_absences_are_review_unless_every_side_is_confirmed(monkeypatch):
+    ex = FakeExtractor(make_label(warning=None))
+    monkeypatch.setattr(routes, "get_extractor", lambda choice=None, **kw: Selection(ex, False))
+    partial = post_many(1).json()
+    assert partial["all_sides"] is False and partial["overall"] == "needs_review"
+    full = post_many(1, all_sides="true").json()
+    assert full["all_sides"] is True and full["overall"] == "fail"
+
+
+def test_each_image_counts_against_the_cloud_cap(monkeypatch):
+    cloud = CloudFake(make_label(provider="azure_vision", heading_bold=True, body_bold=False))
+    p = _cloud_env(monkeypatch, cloud, CLOUD_DAILY_CAP="3")
+    assert post_many(2, provider="auto").json()["provider"] == "azure_vision"
+    assert p.cloud_cap.remaining() == 1
+    second = post_many(2, provider="auto").json()  # needs 2, only 1 left: offline, nothing taken
+    assert second["provider"] == "local_ocr" and p.cloud_cap.remaining() == 1
+
+
+def test_pace_takes_all_slots_of_a_multi_image_label_or_none():
+    r = protection.RateLimiter(3)
+    assert r.check_n("cloud", 2, now=0.0) == 0
+    assert r.check_n("cloud", 2, now=1.0) > 0  # only 1 left: nothing recorded
+    assert r.check_n("cloud", 1, now=2.0) == 0
+    assert r.check_n("cloud", 1, now=61.0) == 0  # the first two expired
+
+
+def test_batch_waits_for_a_busy_cloud_instead_of_going_offline(monkeypatch):
+    p = protection.reset_for_tests()
+    cooldowns = [3.0, 2.0, 0.0]
+    slept = []
+    reason = p.wait_for_cloud(lambda: cooldowns.pop(0), 1, max_wait_s=10, sleep=slept.append)
+    assert reason is None and len(slept) == 2
+    assert p.cloud_cap.remaining() == 999
+
+
+def test_single_check_does_not_wait():
+    p = protection.reset_for_tests()
+    slept = []
+    assert p.wait_for_cloud(lambda: 5.0, 1, max_wait_s=0, sleep=slept.append) == protection.CLOUD_COOLDOWN
+    assert slept == []
+
+
+def test_waiting_never_outlasts_the_daily_cap(monkeypatch):
+    monkeypatch.setenv("CLOUD_DAILY_CAP", "0")
+    p = protection.reset_for_tests()
+    slept = []
+    assert p.wait_for_cloud(lambda: 0.0, 1, max_wait_s=30, sleep=slept.append) == protection.CLOUD_CAP_REACHED
+    assert slept == []

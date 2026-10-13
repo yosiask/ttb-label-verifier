@@ -1,0 +1,51 @@
+{
+  "case": "beer_abv_mismatch",
+  "description": "Beer label 7.8%, application 6.8%.",
+  "truth": "violation",
+  "simulated_photo": true,
+  "images": [
+    "beer_abv_mismatch.jpg"
+  ],
+  "image": "beer_abv_mismatch.jpg",
+  "all_sides": true,
+  "label": {
+    "brand": "IRON GATE BREWING",
+    "class_type": "India Pale Ale",
+    "alcohol": "7.8% Alc./Vol.",
+    "net": "12 FL. OZ.",
+    "producer": "Brewed and Canned by Iron Gate Brewing Co., Asheville, North Carolina",
+    "country": null,
+    "heading": "GOVERNMENT WARNING:",
+    "body": "(1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+    "heading_bold": true,
+    "body_bold": false,
+    "warning": true
+  },
+  "application": {
+    "brand_name": "IRON GATE BREWING",
+    "class_type": "India Pale Ale",
+    "alcohol_content": "6.8% Alc./Vol.",
+    "net_contents": "12 fl oz",
+    "producer_name_address": "Iron Gate Brewing Co., Asheville, North Carolina",
+    "country_of_origin": null,
+    "is_import": false,
+    "beverage_type": "beer"
+  },
+  "expected": {
+    "azure_vision": {
+      "overall": [
+        "fail"
+      ],
+      "fields": {
+        "alcohol_content": "fail"
+      }
+    },
+    "local_ocr": {
+      "overall": [
+        "fail",
+        "needs_review"
+      ],
+      "fields": {}
+    }
+  }
+}

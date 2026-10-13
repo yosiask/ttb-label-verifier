@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import errors
+from ..core.engine import MAX_IMAGES
 from .protection import BodySizeLimit
 from .routes import max_upload_bytes, router
 
@@ -31,8 +32,8 @@ async def security_headers(request, call_next):
     return response
 
 
-# Whole-request cap: the image limit plus 1 MB for the form fields and multipart overhead.
-app.add_middleware(BodySizeLimit, max_bytes_fn=lambda: max_upload_bytes() + 1024 * 1024,
+# Whole-request cap: up to MAX_IMAGES images at the per-image limit, plus 1 MB for the form.
+app.add_middleware(BodySizeLimit, max_bytes_fn=lambda: max_upload_bytes() * MAX_IMAGES + 1024 * 1024,
                    shown_mb_fn=lambda: max_upload_bytes() / (1024 * 1024))
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

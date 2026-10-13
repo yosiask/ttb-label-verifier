@@ -49,6 +49,19 @@ class RateLimiter:
             q.append(now)
             return 0.0
 
+    def check_n(self, key: str, n: int, now: float | None = None) -> float:
+        """Record n hits at once only if all n fit. Returns 0 if recorded, else seconds to wait."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            q = self._hits.setdefault(key, deque())
+            while q and now - q[0] >= self.window_s:
+                q.popleft()
+            if len(q) + n > self.per_minute:
+                k = len(q) + n - self.per_minute  # hits that must expire first
+                return max(0.5, self.window_s - (now - q[k - 1])) if k <= len(q) else self.window_s
+            q.extend([now] * n)
+            return 0.0
+
     def _evict(self, now: float) -> None:
         for k in [k for k, q in self._hits.items() if not q or now - q[-1] >= self.window_s]:
             del self._hits[k]
@@ -68,18 +81,23 @@ class DailyCap:
         if today != self._day:
             self._day, self._count = today, 0
 
-    def try_take(self) -> bool:
+    def try_take(self, n: int = 1) -> bool:
         with self._lock:
             self._roll()
-            if self._count >= self.limit:
+            if self._count + n > self.limit:
                 return False
-            self._count += 1
+            self._count += n
             return True
 
     def remaining(self) -> int:
         with self._lock:
             self._roll()
             return max(0, self.limit - self._count)
+
+
+CLOUD_COOLDOWN = "The cloud AI engine is at its usage limit right now."
+CLOUD_BUSY = "The cloud AI engine is busy with other labels right now."
+CLOUD_CAP_REACHED = "Today's cloud AI limit has been reached."
 
 
 class Protection:
@@ -91,17 +109,30 @@ class Protection:
         self.concurrency = threading.BoundedSemaphore(_int_env("MAX_CONCURRENT_VERIFICATIONS", 4))
         self.queue_wait_s = float(os.environ.get("QUEUE_WAIT_S", "30"))
         self.trusted_proxy_hops = _int_env("TRUSTED_PROXY_HOPS", 0)
+        self.cloud_wait_s = float(os.environ.get("CLOUD_WAIT_S", "45"))  # batch: wait this long for a cloud slot
 
-    def cloud_block_reason(self, cooldown_s: float) -> str | None:
-        """Why the cloud should not be called for this request, or None to call it.
-        Counts against the pace and the daily cap only when the call will be made."""
+    def cloud_block_reason(self, cooldown_s: float, calls: int = 1) -> str | None:
+        """Why the cloud should not be called for this request (one call per label image),
+        or None to call it. Counts against the pace and the daily cap only when calls will be made."""
         if cooldown_s > 0:
-            return "The cloud AI engine is at its usage limit right now."
-        if self.cloud_pace is not None and self.cloud_pace.check("cloud"):
-            return "The cloud AI engine is busy with other labels right now."
-        if not self.cloud_cap.try_take():  # counted before the call: the cost is incurred either way
-            return "Today's cloud AI limit has been reached."
+            return CLOUD_COOLDOWN
+        if self.cloud_pace is not None and self.cloud_pace.check_n("cloud", calls):
+            return CLOUD_BUSY
+        if not self.cloud_cap.try_take(calls):  # counted before the call: the cost is incurred either way
+            return CLOUD_CAP_REACHED
         return None
+
+    def wait_for_cloud(self, cooldown_fn, calls: int, max_wait_s: float, sleep=time.sleep) -> str | None:
+        """Like cloud_block_reason, but waits up to max_wait_s for a busy cloud to free up
+        (pace or a 429 cooldown). Used by batch runs, so every label gets the cloud reader
+        instead of the first ones taking all the slots. Never waits for the daily cap."""
+        deadline = time.monotonic() + max_wait_s
+        while True:
+            reason = self.cloud_block_reason(cooldown_fn(), calls)
+            left = deadline - time.monotonic()
+            if reason is None or reason == CLOUD_CAP_REACHED or left <= 0:
+                return reason
+            sleep(min(1.0, left))
 
     def client_ip(self, request: Request) -> str:
         """Socket peer, or the address added by our own trusted proxies (e.g. 1 for Azure

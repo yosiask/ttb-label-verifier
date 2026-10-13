@@ -93,7 +93,9 @@ class VerificationResult(BaseModel):
     image_readable: bool
     provider: str
     message: str | None = None  # banner-level explanation, e.g. "request a better image"
-    image_quality: ImageQuality | None = None
+    image_quality: ImageQuality | None = None  # of the hardest-to-read image when there are several
+    image_count: int = 1
+    all_sides: bool = True  # False: the images may not show every side, so absences are Needs review
     timings_ms: dict[str, int]
     # Tokens billed for the cloud call, for cost tracking; None when the cloud was not used.
     token_usage: dict[str, int] | None = None
