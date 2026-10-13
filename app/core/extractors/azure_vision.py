@@ -10,6 +10,8 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
+import threading
 import time
 from typing import Any, Literal
 
@@ -24,8 +26,22 @@ class ProviderTimeoutError(ProviderUnavailableError):
     """The provider did not answer within its time budget."""
 
 
+class ProviderRateLimitedError(ProviderUnavailableError):
+    """Azure answered 429 (tokens- or requests-per-minute limit). No call is made until the
+    cooldown it asked for has passed, so a busy minute falls back to offline OCR at once."""
+
+    def __init__(self, message: str, retry_after_s: float):
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
 MAX_LONG_EDGE = 1600
 API_VERSION = "2024-10-21"
+# Azure counts max_tokens against the deployment's tokens-per-minute limit on every request,
+# whatever the answer's real length, so keep it close to the largest expected reading.
+DEFAULT_MAX_OUTPUT_TOKENS = 1000
+COOLDOWN_DEFAULT_S, COOLDOWN_MIN_S, COOLDOWN_MAX_S = 5.0, 1.0, 60.0
+RATE_LIMITED_MESSAGE = "The cloud AI engine is at its usage limit right now."
 
 SYSTEM_PROMPT = """You transcribe alcohol beverage labels for a compliance reviewer.
 Report exactly what is printed. Do not correct spelling, capitalization, punctuation or wording,
@@ -115,15 +131,43 @@ def _empty_none(v: str | None) -> str | None:
     return v if v and v.strip() else None
 
 
+def retry_after_seconds(error: Exception) -> float:
+    """Wait asked for by a 429 (retry-after-ms, else retry-after), clamped to a sane range."""
+    headers = getattr(getattr(error, "response", None), "headers", None) or {}
+    wait = None
+    for name, scale in (("retry-after-ms", 0.001), ("retry-after", 1.0)):
+        try:
+            wait = float(headers.get(name)) * scale
+            break
+        except (TypeError, ValueError):
+            continue
+    if wait is None:
+        wait = COOLDOWN_DEFAULT_S
+    return min(COOLDOWN_MAX_S, max(COOLDOWN_MIN_S, wait))
+
+
 class AzureVisionExtractor:
     name = "azure_vision"
 
     def __init__(self, endpoint: str, deployment: str, api_key: str | None = None,
-                 timeout_s: float = 8.0, client: Any = None):
+                 timeout_s: float = 8.0, client: Any = None, max_output_tokens: int | None = None):
         self.deployment = deployment
         self.timeout_s = timeout_s
+        self.max_output_tokens = max_output_tokens or int(
+            os.environ.get("AZURE_MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS))
         self._client = client
         self._endpoint, self._api_key = endpoint, api_key
+        self._cooldown_until = 0.0
+        self._lock = threading.Lock()
+
+    def cooldown_remaining(self) -> float:
+        """Seconds until the cloud may be called again after a 429; 0 when it is free."""
+        with self._lock:
+            return max(0.0, self._cooldown_until - time.monotonic())
+
+    def _start_cooldown(self, seconds: float) -> None:
+        with self._lock:
+            self._cooldown_until = max(self._cooldown_until, time.monotonic() + seconds)
 
     @property
     def client(self):
@@ -134,6 +178,9 @@ class AzureVisionExtractor:
     def extract(self, image: Image.Image) -> ExtractedLabel:
         import openai
 
+        wait = self.cooldown_remaining()
+        if wait:
+            raise ProviderRateLimitedError(RATE_LIMITED_MESSAGE, wait)
         t0 = time.perf_counter()
         data_url = encode_image(image)
         t1 = time.perf_counter()
@@ -141,7 +188,7 @@ class AzureVisionExtractor:
             resp = self.client.chat.completions.create(
                 model=self.deployment,
                 temperature=0,
-                max_tokens=1500,
+                max_tokens=self.max_output_tokens,
                 timeout=self.timeout_s,
                 response_format={"type": "json_schema",
                                  "json_schema": {"name": "label_reading", "strict": True, "schema": SCHEMA}},
@@ -156,7 +203,9 @@ class AzureVisionExtractor:
         except openai.APITimeoutError as e:
             raise ProviderTimeoutError(f"The cloud AI engine did not answer within {self.timeout_s:g} seconds.") from e
         except openai.RateLimitError as e:
-            raise ProviderUnavailableError("The cloud AI engine is at its usage limit right now.") from e
+            wait = retry_after_seconds(e)
+            self._start_cooldown(wait)
+            raise ProviderRateLimitedError(RATE_LIMITED_MESSAGE, wait) from e
         except openai.OpenAIError as e:
             raise ProviderUnavailableError(f"The cloud AI engine could not be reached ({type(e).__name__}).") from e
         t2 = time.perf_counter()

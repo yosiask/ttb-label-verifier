@@ -39,7 +39,7 @@ def fresh_limits(monkeypatch):
 @pytest.fixture
 def fake(monkeypatch):
     ex = FakeExtractor(make_label())
-    monkeypatch.setattr(routes, "get_extractor", lambda choice=None, cloud_allowed=True: Selection(ex, False))
+    monkeypatch.setattr(routes, "get_extractor", lambda choice=None, **kw: Selection(ex, False))
     return ex
 
 
@@ -213,3 +213,53 @@ def test_local_choice_never_counts_against_cloud_cap(monkeypatch):
     before = p.cloud_cap.remaining()
     assert post(provider="local").status_code == 200
     assert p.cloud_cap.remaining() == before
+
+
+class CoolingCloud(CloudFake):
+    def __init__(self, label, cooldown):
+        super().__init__(label)
+        self.cooldown = cooldown
+
+    def cooldown_remaining(self):
+        return self.cooldown
+
+
+def _cloud_env(monkeypatch, cloud, **env):
+    from app.core.extractors import factory
+
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.invalid/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "vision")
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    p = protection.reset_for_tests()
+    monkeypatch.setattr(factory, "azure_extractor", lambda: cloud)
+    monkeypatch.setattr(factory, "LocalOcrExtractor", lambda: FakeExtractor(make_label()))
+    return p
+
+
+def test_cloud_pace_sends_extra_labels_offline_at_once(monkeypatch):
+    """Over the per-minute cloud pace, auto mode uses offline OCR immediately instead of
+    sending a call Azure would refuse; an explicit cloud request gets a clear 503."""
+    cloud = CloudFake(make_label(provider="azure_vision", heading_bold=True, body_bold=False))
+    p = _cloud_env(monkeypatch, cloud, CLOUD_REQUESTS_PER_MINUTE="2")
+    assert [post(provider="auto").json()["provider"] for _ in range(3)] == ["azure_vision", "azure_vision", "local_ocr"]
+    third = post(provider="auto").json()
+    assert "busy" in third["message"] and "offline engine was used" in third["message"]
+    assert cloud.seen_images == 2
+    r = post(provider="azure")
+    assert r.status_code == 503 and "busy" in r.json()["message"]
+    assert p.cloud_cap.remaining() == 1000 - 2  # only calls actually made count against the day
+
+
+def test_cloud_cooldown_after_429_skips_cloud_without_using_cap(monkeypatch):
+    cloud = CoolingCloud(make_label(provider="azure_vision"), cooldown=4.0)
+    p = _cloud_env(monkeypatch, cloud)
+    r = post(provider="auto").json()
+    assert r["provider"] == "local_ocr" and "usage limit" in r["message"]
+    assert cloud.seen_images == 0 and p.cloud_cap.remaining() == 1000
+    cloud.cooldown = 0.0
+    assert post(provider="auto").json()["provider"] == "azure_vision"
+
+
+def test_no_pacing_by_default():
+    assert protection.reset_for_tests().cloud_pace is None

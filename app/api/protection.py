@@ -4,6 +4,9 @@ Budget alerts only notify; these limits stop spending. All counters are in memor
 per replica, so with a known maximum replica count the worst case is bounded:
     max cloud calls per day = CLOUD_DAILY_CAP x max replicas.
 The Azure OpenAI deployment's tokens-per-minute quota is a further hard limit enforced by Azure.
+CLOUD_REQUESTS_PER_MINUTE paces cloud calls per replica to stay inside that quota (set it to
+roughly deployment TPM / tokens counted per label / max replicas). Over the pace, or while Azure
+asks us to back off after a 429, auto mode uses offline OCR at once instead of queueing.
 """
 
 from __future__ import annotations
@@ -83,9 +86,22 @@ class Protection:
     def __init__(self):
         self.rate = RateLimiter(_int_env("RATE_LIMIT_PER_MINUTE", 120))
         self.cloud_cap = DailyCap(_int_env("CLOUD_DAILY_CAP", 1000))
+        pace = _int_env("CLOUD_REQUESTS_PER_MINUTE", 0)  # 0: no pacing beyond Azure's own limit
+        self.cloud_pace = RateLimiter(pace) if pace > 0 else None
         self.concurrency = threading.BoundedSemaphore(_int_env("MAX_CONCURRENT_VERIFICATIONS", 4))
         self.queue_wait_s = float(os.environ.get("QUEUE_WAIT_S", "30"))
         self.trusted_proxy_hops = _int_env("TRUSTED_PROXY_HOPS", 0)
+
+    def cloud_block_reason(self, cooldown_s: float) -> str | None:
+        """Why the cloud should not be called for this request, or None to call it.
+        Counts against the pace and the daily cap only when the call will be made."""
+        if cooldown_s > 0:
+            return "The cloud AI engine is at its usage limit right now."
+        if self.cloud_pace is not None and self.cloud_pace.check("cloud"):
+            return "The cloud AI engine is busy with other labels right now."
+        if not self.cloud_cap.try_take():  # counted before the call: the cost is incurred either way
+            return "Today's cloud AI limit has been reached."
+        return None
 
     def client_ip(self, request: Request) -> str:
         """Socket peer, or the address added by our own trusted proxies (e.g. 1 for Azure

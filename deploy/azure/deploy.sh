@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Reproducible Azure deployment for the label verifier.
+# Reference: full from-scratch provisioning plus deployment, for a fresh subscription.
 #
-# Creates billable resources. Run only after the owner has approved the subscription,
-# region, budget and model deployment. Nothing runs unless CONFIRM=yes is set.
+# For the shared review deployment the infrastructure is provisioned by the infrastructure
+# owner. Do NOT run this there: it would duplicate resources. Deploy the application onto the
+# existing resources with:
+#
+#   python deploy/azure/app_deploy.py check  -g rg-ttb-label-verifier
+#   python deploy/azure/app_deploy.py deploy -g rg-ttb-label-verifier --confirm
+#
+# This script creates billable resources and refuses to touch a resource group that already
+# exists (set ALLOW_EXISTING_RG=yes to update one you own). Nothing runs unless CONFIRM=yes:
 #
 #   SUBSCRIPTION_ID=... BUDGET_EMAIL=... CONFIRM=yes deploy/azure/deploy.sh
-#
-# Re-running is safe: every step is create-or-update.
 set -euo pipefail
 
 : "${SUBSCRIPTION_ID:?set SUBSCRIPTION_ID}"
@@ -19,15 +24,18 @@ AOAI="${AOAI:-aoai-ttb-label-$SUFFIX}"
 MODEL="${MODEL:-gpt-4.1-mini}"
 MODEL_VERSION="${MODEL_VERSION:-2025-04-14}"
 MODEL_SKU="${MODEL_SKU:-Standard}"            # regional pay-per-call; never provisioned throughput
-MODEL_CAPACITY="${MODEL_CAPACITY:-100}"       # thousands of tokens per minute: a hard limit Azure enforces
+MODEL_CAPACITY="${MODEL_CAPACITY:-30}"        # thousands of tokens per minute: a hard limit Azure enforces
 DEPLOYMENT="${DEPLOYMENT:-label-vision}"
 ENV_NAME="${ENV_NAME:-cae-ttb-label-verifier}"
 APP="${APP:-ttb-label-verifier}"
 MIN_REPLICAS="${MIN_REPLICAS:-0}"             # 1 during review week avoids cold starts (a few dollars)
-MAX_REPLICAS="${MAX_REPLICAS:-3}"
+MAX_REPLICAS="${MAX_REPLICAS:-2}"
 CLOUD_DAILY_CAP="${CLOUD_DAILY_CAP:-1000}"    # per replica: worst case CLOUD_DAILY_CAP x MAX_REPLICAS calls/day
 RATE_LIMIT_PER_MINUTE="${RATE_LIMIT_PER_MINUTE:-120}"
 BUDGET_AMOUNT="${BUDGET_AMOUNT:-100}"         # alerts at 50% ($50) and 100% ($100)
+# Cloud calls per minute per replica that keep all replicas inside the model quota
+# (about 4.5K tokens counted per label, 80% headroom); see app_deploy.py pace_per_replica.
+CLOUD_REQUESTS_PER_MINUTE="${CLOUD_REQUESTS_PER_MINUTE:-$(( MODEL_CAPACITY * 800 / 4500 / MAX_REPLICAS > 0 ? MODEL_CAPACITY * 800 / 4500 / MAX_REPLICAS : 1 ))}"
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 
 if [[ "${CONFIRM:-}" != "yes" ]]; then
@@ -37,6 +45,10 @@ fi
 
 cd "$(dirname "$0")/../.."
 az account set --subscription "$SUBSCRIPTION_ID"
+if [[ "$(az group exists -n "$RG")" == "true" && "${ALLOW_EXISTING_RG:-}" != "yes" ]]; then
+  echo "Resource group $RG already exists. Use deploy/azure/app_deploy.py to deploy onto it." >&2
+  exit 1
+fi
 
 echo "== Resource providers"
 for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.CognitiveServices; do
@@ -94,6 +106,7 @@ az containerapp create -g "$RG" -n "$APP" --environment "$ENV_NAME" \
   --env-vars EXTRACTOR=auto AZURE_OPENAI_ENDPOINT="$AOAI_ENDPOINT" AZURE_OPENAI_DEPLOYMENT="$DEPLOYMENT" \
              MAX_UPLOAD_MB=10 CLOUD_DAILY_CAP="$CLOUD_DAILY_CAP" RATE_LIMIT_PER_MINUTE="$RATE_LIMIT_PER_MINUTE" \
              MAX_CONCURRENT_VERIFICATIONS=3 TRUSTED_PROXY_HOPS=1 AZURE_TIMEOUT_S=8 \
+             CLOUD_REQUESTS_PER_MINUTE="$CLOUD_REQUESTS_PER_MINUTE" AZURE_MAX_OUTPUT_TOKENS=1000 \
   -o none
 PRINCIPAL=$(az containerapp show -g "$RG" -n "$APP" --query identity.principalId -o tsv)
 az role assignment create --assignee-object-id "$PRINCIPAL" --assignee-principal-type ServicePrincipal \

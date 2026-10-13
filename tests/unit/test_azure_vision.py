@@ -130,3 +130,65 @@ def test_connection_error_is_unavailable():
     ex, _ = extractor(error=openai.APIConnectionError(request=req))
     with pytest.raises(ProviderUnavailableError, match="could not be reached"):
         ex.extract(img())
+
+
+def rate_limit_error(headers):
+    req = httpx.Request("POST", "https://example.invalid/")
+    resp = httpx.Response(429, request=req, headers=headers)
+    return openai.RateLimitError("Rate limit is exceeded", response=resp, body=None)
+
+
+def test_output_budget_is_small_and_configurable(monkeypatch):
+    """Azure counts max_tokens against tokens-per-minute on every call, so it stays near the
+    largest expected reading instead of a generous ceiling."""
+    ex, comp = extractor(content=json.dumps(READING))
+    ex.extract(img())
+    assert comp.calls[0]["max_tokens"] == 1000
+    monkeypatch.setenv("AZURE_MAX_OUTPUT_TOKENS", "700")
+    ex, comp = extractor(content=json.dumps(READING))
+    ex.extract(img())
+    assert comp.calls[0]["max_tokens"] == 700
+
+
+@pytest.mark.parametrize("headers,expected", [
+    ({"retry-after-ms": "2500"}, 2.5),
+    ({"retry-after": "7"}, 7.0),
+    ({}, 5.0),
+    ({"retry-after": "3600"}, 60.0),
+    ({"retry-after-ms": "10"}, 1.0),
+])
+def test_429_waits_as_asked_within_bounds(headers, expected):
+    from app.core.extractors.azure_vision import ProviderRateLimitedError
+
+    ex, _ = extractor(error=rate_limit_error(headers))
+    with pytest.raises(ProviderRateLimitedError) as e:
+        ex.extract(img())
+    assert e.value.retry_after_s == pytest.approx(expected)
+    assert expected - 0.5 < ex.cooldown_remaining() <= expected
+
+
+def test_no_calls_during_cooldown_then_calls_resume(monkeypatch):
+    """After a 429 the cloud is not called again until the wait has passed: retrying at once
+    would count against the limit again and only lengthen the wait."""
+    from app.core.extractors import azure_vision
+    from app.core.extractors.azure_vision import ProviderRateLimitedError
+
+    clock = [1000.0]
+    monkeypatch.setattr(azure_vision.time, "monotonic", lambda: clock[0])
+    ex, comp = extractor(error=rate_limit_error({"retry-after": "3"}))
+    with pytest.raises(ProviderRateLimitedError):
+        ex.extract(img())
+    with pytest.raises(ProviderRateLimitedError):
+        ex.extract(img())
+    assert len(comp.calls) == 1
+    clock[0] += 3.1
+    comp.error, comp.content = None, json.dumps(READING)
+    assert ex.cooldown_remaining() == 0
+    assert ex.extract(img()).provider == "azure_vision"
+    assert len(comp.calls) == 2
+
+
+def test_rate_limit_is_unavailable_so_auto_falls_back():
+    ex, _ = extractor(error=rate_limit_error({}))
+    with pytest.raises(ProviderUnavailableError, match="usage limit"):
+        ex.extract(img())

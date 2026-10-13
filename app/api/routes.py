@@ -8,7 +8,8 @@ from pydantic import ValidationError
 
 from ..core.engine import verify
 from ..core.extractors.base import ProviderUnavailableError
-from ..core.extractors.factory import azure_configured, default_provider, enabled_providers, get_extractor
+from ..core.extractors.factory import (azure_configured, cloud_cooldown_s, default_provider, enabled_providers,
+                                      get_extractor)
 from ..core.models import ApplicationData, VerificationResult
 from ..core.preprocess import InvalidImageError
 from . import protection
@@ -89,10 +90,10 @@ def verify_label(
                        headers={"Retry-After": "10"})
     try:
         choice = (provider or default_provider()).lower()
-        cloud_allowed = True
+        blocked = None
         if choice in ("azure", "auto") and azure_configured():
-            cloud_allowed = p.cloud_cap.try_take()  # counted before the call: the cost is incurred either way
-        selection = get_extractor(choice, cloud_allowed=cloud_allowed)
+            blocked = p.cloud_block_reason(cloud_cooldown_s())
+        selection = get_extractor(choice, cloud_allowed=blocked is None, blocked_reason=blocked)
         result = verify(data, app_data, selection.extractor)
     except InvalidImageError as e:
         raise ApiError(422, "unreadable_image", f"{e} Try saving the label as JPEG or PNG and upload again.")

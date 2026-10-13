@@ -57,7 +57,8 @@ The public demo has no login, so spending is limited in the server, not just by 
 
 - 10 MB per image, enforced while the request streams in, before it is parsed. JPEG, PNG and WebP only.
 - Per-IP rate limit (default 120 checks/minute). Behind Azure Container Apps, only the address added by the platform's own proxy is trusted.
-- Daily cap on cloud AI calls (default 1,000 per replica, at most 3 replicas). Past the cap, the app switches to offline OCR and says so.
+- Daily cap on cloud AI calls (default 1,000 per replica, at most 2 replicas). Past the cap, the app switches to offline OCR and says so.
+- Cloud calls are paced per replica (`CLOUD_REQUESTS_PER_MINUTE`) to stay inside the model deployment's tokens-per-minute quota. If Azure still answers 429, the app waits as long as Azure asks (`retry-after`) without calling again. Either way, a label checked in that moment uses offline OCR at once, with a note, instead of waiting. The output budget (`max_tokens` 1000) is kept small because Azure counts it against the quota on every call.
 - At most 4 checks at a time per replica; extra requests wait up to 30 s, then get a plain "server is busy" message.
 - Hard tokens-per-minute quota on the Azure OpenAI deployment, enforced by Azure.
 
@@ -68,11 +69,30 @@ All thresholds live in `app/core/config.py`. They are the starting values from t
 ```
 app/core/        pure library (no FastAPI): models, engine, rules, warning, extractors, preprocessing, quality
 app/api/         FastAPI: /api/verify, /api/health, /api/config, usage protection, plain-English errors
-deploy/azure/    deploy.sh (az CLI, not yet run) ; Dockerfile builds in Azure with `az acr build`
+deploy/azure/    app_deploy.py: check + deploy the app onto existing Azure resources (creates nothing)
+                 deploy.sh: reference from-scratch provisioning (not used for the review deployment)
 app/web/         one static page, vanilla JS, no build step
 scripts/         make_fixtures.py renders synthetic labels with hand-written expected results
 tests/           unit, API, fixture tests through real OCR, and a simulated-vision fixture run
 ```
+
+## Deploying onto existing Azure resources
+
+The review deployment's infrastructure (resource group, Azure OpenAI with a gpt-4.1-mini Standard deployment, Basic container registry, Container Apps, managed identity and role assignments) is provisioned separately. The app is deployed onto it with:
+
+```bash
+python deploy/azure/app_deploy.py check  -g rg-ttb-label-verifier            # read-only
+python deploy/azure/app_deploy.py deploy -g rg-ttb-label-verifier            # dry run: prints the settings
+python deploy/azure/app_deploy.py deploy -g rg-ttb-label-verifier --confirm  # az acr build + containerapp update
+```
+
+`check` finds the resources and confirms that the app can run on them:
+- the model, deployment type and auth (Entra ID only);
+- that the app's managed identity has Cognitive Services OpenAI User on the Azure OpenAI resource and AcrPull on the registry;
+- external ingress, container size and replica range;
+- what the model quota allows per minute.
+
+`deploy` builds the image in the registry and points the existing app at it. It sets the listen port to the app's existing ingress target port, and the cloud pace from the quota and maximum replicas. It also sets `AZURE_CLIENT_ID` when the app uses a user-assigned identity. Its smoke test calls only `/api/health` and `/api/config`, so deploying never starts model inference.
 
 ## Data handling
 

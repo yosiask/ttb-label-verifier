@@ -46,6 +46,18 @@ def azure_extractor():
                   os.environ.get("AZURE_OPENAI_API_KEY") or None, float(os.environ.get("AZURE_TIMEOUT_S", "8")))
 
 
+def cloud_cooldown_s() -> float:
+    """Seconds left of a cooldown Azure asked for with a 429; 0 when the cloud may be called."""
+    if not azure_configured():
+        return 0.0
+    remaining = getattr(azure_extractor(), "cooldown_remaining", None)
+    return remaining() if remaining else 0.0
+
+
+CAP_REACHED = "Today's cloud AI limit has been reached."
+CAP_REACHED_NOTE = "Today's cloud AI limit has been reached, so the offline engine was used."
+
+
 @dataclass
 class Selection:
     extractor: LabelExtractor
@@ -53,8 +65,10 @@ class Selection:
     note: str | None = None  # shown to the reviewer, e.g. why the offline engine was used
 
 
-def get_extractor(choice: str | None = None, cloud_allowed: bool = True) -> Selection:
-    """cloud_allowed=False when the server-side daily cloud cap is used up."""
+def get_extractor(choice: str | None = None, cloud_allowed: bool = True,
+                  blocked_reason: str | None = None) -> Selection:
+    """cloud_allowed=False when server-side protection holds the cloud back: the daily cap is
+    used up, or the deployment's per-minute budget is spent. blocked_reason says which."""
     choice = (choice or default_provider()).lower()
     if choice not in PROVIDERS:
         raise ProviderUnavailableError(f"Unknown engine \"{choice}\". Use local, azure or auto.")
@@ -66,10 +80,11 @@ def get_extractor(choice: str | None = None, cloud_allowed: bool = True) -> Sele
         if not azure_configured():
             raise ProviderUnavailableError("The cloud AI engine is not set up on this server. Use the offline engine.")
         if not cloud_allowed:
-            raise ProviderUnavailableError("Today's cloud AI limit has been reached. Use the offline engine.")
+            raise ProviderUnavailableError(
+                f"{blocked_reason or CAP_REACHED} Use the offline engine.")
     elif not azure_configured() or not cloud_allowed:  # auto
         note = None if not azure_configured() else \
-            "Today's cloud AI limit has been reached, so the offline engine was used."
+            (f"{blocked_reason} The offline engine was used." if blocked_reason else CAP_REACHED_NOTE)
         return Selection(local, uses_cloud=False, note=note)
 
     from .crosscheck import CrossCheckedExtractor
